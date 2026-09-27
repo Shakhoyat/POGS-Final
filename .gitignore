@@ -1,0 +1,54 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Large Model Checkpoints (>100MB exceeds GitHub limits, e.g. pogs_fields.pt 137MB)
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Scratch, Temporary & Cache directories
+scratch/
+tmp/
+temp/
+*.tmp
+*.log
+.cache/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
