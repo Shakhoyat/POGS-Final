@@ -1,0 +1,10 @@
+{
+  "num_clusters": 1,
+  "target_object": "ceramic_mug",
+  "n_gaussians": 1180,
+  "centroid": [
+    -0.07330098748207092,
+    -0.05829480662941933,
+    0.07892879098653793
+  ]
+}
