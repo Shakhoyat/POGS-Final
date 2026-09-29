@@ -1,0 +1,10 @@
+{
+  "num_clusters": 1,
+  "target_object": "mustard_bottle",
+  "n_gaussians": 1200,
+  "centroid": [
+    -0.15797896683216095,
+    0.06026186794042587,
+    0.09447599947452545
+  ]
+}
