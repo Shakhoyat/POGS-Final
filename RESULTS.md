@@ -19,8 +19,8 @@ are in git history (commit 375cd10) and are not comparable.
 **Metrics.** *ADD-S success* = fraction of frames with ADD-S below 10% of the
 object diameter (standard, symmetry-aware). *Lost* = fraction of frames with
 position error > 10 cm. The paper's *3 cm & 5 deg* rule is in the per-experiment
-summaries but stays at 10-18% for every method: the gripper alone tilts the held
-mug by ~20 deg (rotation error 9 deg with no occluder, 23 deg with the gripper),
+summaries but stays at 10-20% for every tracker whenever the gripper is in view
+(about 35% without an occluder): the gripper alone tilts the held mug by ~20 deg (rotation error 9 deg with no occluder, 23 deg with the gripper),
 so it cannot separate methods. Means are over 3 seeds; ± is the seed std.
 
 ## Main findings
@@ -50,8 +50,8 @@ so it cannot separate methods. Means are over 3 seeds; ± is the seed std.
    extrapolates yaw.
 5. **Overall (54 cases):** KF + check 75% / 16% lost vs POGS 71% / 22%, at the
    same speed (1.7 vs 1.8 Hz). At 10 iterations: 70% / 24% vs 65% / 30%.
-6. **Cereal box: KF + check's clearest win.** 86% ± 5% with 0% lost vs POGS
-   57% ± 10% / 31% lost. Once POGS lags, the rendered box overlaps floor pixels
+6. **Cereal box: KF + check's clearest win.** 86% ± 6% with 0% lost vs POGS
+   57% ± 13% / 31% lost. Once POGS lags, the rendered box overlaps floor pixels
    and the depth term drags it into the background; the warm start keeps it on
    the object.
 7. **Occlusion by a hand is unsolved.** Every method is at 34-43% with ~54% of

@@ -30,6 +30,8 @@ experiments/
   v3_scene_mustard/ object and multi-object factors (folder name kept for history)
   realtime/        real-time protocol: 30 Hz camera, the tracker skips frames it
                    is too slow for and is scored on its published (stale) pose
+report/            LaTeX report (main.tex -> main.pdf; make_figures.py rebuilds the
+                   figures from the cached runs; compile with tectonic or pdflatex)
 tests/             regression tests (pose maths, PCA persistence, metrics, ...)
 tools/             gsplat CUDA setup without sudo
 legacy/            unmaintained notebook-era modules (grasping, servoing, old generator)
