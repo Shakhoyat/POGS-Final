@@ -202,11 +202,30 @@ class DinoExtractor:
         s = f.shape
         return (f.reshape(-1, s[-1]) @ self.pca_matrix.to(f)).reshape(*s[:-1], self.pca_dim)
 
+    # -- PCA persistence ---------------------------------------------------- #
+    # The rendered DINO features are distilled against features projected with
+    # THIS basis. Tracking must project live frames with the very same matrix
+    # (the official code saves it as ``pca.npy`` next to the DINO cache), so the
+    # basis is part of the checkpoint and is never re-fitted implicitly.
+
+    def get_pca(self) -> torch.Tensor:
+        assert self.pca_matrix is not None, "PCA basis has not been fitted or loaded"
+        return self.pca_matrix.detach().cpu().clone()
+
+    def set_pca(self, matrix: torch.Tensor) -> None:
+        assert matrix.ndim == 2 and matrix.shape[1] == self.pca_dim, matrix.shape
+        self.pca_matrix = matrix.to(self.device).float()
+
     def __call__(self, images: torch.Tensor) -> torch.Tensor:
         if images.dim() == 3:
             images = images.unsqueeze(0)
         if self.pca_matrix is None:
-            self.fit_pca(images)
+            raise RuntimeError(
+                "DinoExtractor has no PCA basis. Fit it on the training views "
+                "(fit_pca) or load it from the checkpoint (set_pca). Fitting it on "
+                "a tracking frame would put observed and rendered features in "
+                "different spaces."
+            )
         feats = self.pca_feats(images)
         if feats.shape[0] == 1:
             return feats.squeeze(0)

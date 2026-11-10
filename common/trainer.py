@@ -1,37 +1,46 @@
 """
 POGS training loop -- Phase 2 of Sec. IV.
 
-Reproduces ``pogs_config.py``: 4000 iterations, per-parameter-group Adam with
-exponential-decay schedules, and nerfstudio's ``gradient_accumulation_steps``
-({'camera_opt': 100, 'color': 10, 'shs': 10, 'lerf': 3}).
+Reproduces the release (``pogs_config.py`` + ``FullImageDatamanager`` +
+nerfstudio's ``Trainer`` / splatfacto):
 
-Supervision is staged exactly as in the official datamanager:
-    step >  dino_step (100)   -> DINO distillation switches on
-    step >  lerf_step (2500)  -> CLIP + grouping distillation switch on
-    step >  dino_step + 1000  -> the DINO nearest-neighbour variance term
+* 4000 iterations, one random training view per step (without replacement
+  until every view has been seen, like ``train_unseen_cameras``);
+* one Adam per parameter group with the release's exponential schedules; a
+  group's scheduler advances only when that group steps (nerfstudio);
+* gradient accumulation: only ``lerf`` (3) -- see ``TrainConfig.grad_accum_lerf``;
+* splatfacto densification through gsplat's ``DefaultStrategy`` (the release's
+  code path) when the gsplat backend is live; an approximate pure-torch fallback
+  otherwise;
+* random background colour per step (splatfacto ``background_color='random'``);
+* staged supervision:
+      step >  dino_step (100)          DINO distillation
+      step >  lerf_step (2500)         CLIP + grouping distillation
+      step >  dino_step + 1000         DINO nearest-neighbour variance term
+* DINO rendered at full resolution before ``lerf_step`` and at
+  ``dino_rescale_factor * (h // 14)`` after it, as the release does.
 
-The 2D masks that supervise the grouping features come from Detic in the paper;
-here they come from the simulator's instance channel (or from any external
-segmenter you plug into ``FeatureCache.masks``), which is the same signal.
+The 2D masks that supervise grouping come from Detic in the paper; here they
+come from the simulator's instance channel, filtered the way the Detic loader
+filters (``build_masks``).
 """
 
 from __future__ import annotations
 
 import math
+import random
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from . import losses as L
-from .config import POGSConfig, TrainConfig, ModelConfig, RuntimeConfig
-from .encoders import ClipPyramid, DinoExtractor, OpenCLIPNetwork
-from .geometry import PinholeCamera
+from .config import POGSConfig
+from .encoders import ClipPyramid, DinoExtractor, OpenCLIPNetwork, get_img_resolution
 from .model import POGSModel
-from .simscene import CaptureData
 
 
 # --------------------------------------------------------------------------- #
@@ -42,20 +51,20 @@ from .simscene import CaptureData
 class POGSOptimizer:
     """One Adam per parameter group, mirroring nerfstudio's ``Optimizers``."""
 
+    GAUSS_GROUPS = ("means", "features_dc", "features_rest", "opacities", "scales", "quats", "dino_feats")
+
     def __init__(self, model: POGSModel, cfg: POGSConfig):
         t = cfg.train
         self.groups: Dict[str, torch.optim.Adam] = {}
         self.scheds: Dict[str, Callable[[int], float]] = {}
         self.base_lr: Dict[str, float] = {}
-        self.accum: Dict[str, int] = {
-            "features_dc": t.grad_accum_color,
-            "features_rest": t.grad_accum_shs,
-            "lerf": t.grad_accum_lerf,
-        }
+        self.n_steps: Dict[str, int] = {}
+        self.accum: Dict[str, int] = {"lerf": t.grad_accum_lerf}
 
         def add(name, params, lr, lr_final=None, max_steps=30000):
             self.groups[name] = torch.optim.Adam(params, lr=lr, eps=1e-15)
             self.base_lr[name] = lr
+            self.n_steps[name] = 0
             if lr_final is None:
                 self.scheds[name] = lambda s: 1.0
             else:
@@ -69,11 +78,9 @@ class POGSOptimizer:
         add("opacities", [gp["opacities"]], t.lr_opacities)
         add("scales", [gp["scales"]], t.lr_scales, t.lr_scales_final, 30000)
         add("quats", [gp["quats"]], t.lr_quats)
-        add("lerf", list(model.gaussian_field.parameters()), t.lr_lerf, t.lr_lerf_final, 15000)
         add("dino_feats", [gp["dino_feats"]], t.lr_dino_feats, t.lr_dino_feats_final, 6000)
-        add("nn_projection", list(model.nn.parameters()), t.lr_nn_projection, t.lr_dino_feats_final, 6000)
-
-    # -- torch-like API used by the refinement code ------------------------ #
+        add("lerf", list(model.gaussian_field.parameters()), t.lr_lerf, t.lr_lerf_final, 15000)
+        add("nn_projection", list(model.nn.parameters()), t.lr_nn_projection, t.lr_nn_projection_final, 6000)
 
     @property
     def param_groups(self):
@@ -87,6 +94,9 @@ class POGSOptimizer:
     def state_for(self, name: str):
         return self.groups[name].state
 
+    def gauss_optimizers(self) -> Dict[str, torch.optim.Optimizer]:
+        return {k: self.groups[k] for k in self.GAUSS_GROUPS}
+
     def zero_grad(self, step: int) -> None:
         for name, opt in self.groups.items():
             if step % self.accum.get(name, 1) == 0:
@@ -96,21 +106,17 @@ class POGSOptimizer:
         for name, opt in self.groups.items():
             if (step + 1) % self.accum.get(name, 1) != 0:
                 continue
-            lr = self.base_lr[name] * self.scheds[name](step)
+            lr = self.base_lr[name] * self.scheds[name](self.n_steps[name])
             for g in opt.param_groups:
                 g["lr"] = lr
             opt.step()
+            self.n_steps[name] += 1
 
     def rebind(self, model: POGSModel) -> None:
-        """Re-point the per-name Adams at the (possibly resized) parameters."""
-        gp = model.gauss_params
-        mapping = {
-            "means": [gp["means"]], "features_dc": [gp["features_dc"]],
-            "features_rest": [gp["features_rest"]], "opacities": [gp["opacities"]],
-            "scales": [gp["scales"]], "quats": [gp["quats"]], "dino_feats": [gp["dino_feats"]],
-        }
-        for name, params in mapping.items():
-            self.groups[name].param_groups[0]["params"] = params
+        """Re-point the per-name Adams at the (possibly resized) parameters
+        (torch fallback densifier only; gsplat's strategy does this itself)."""
+        for name in self.GAUSS_GROUPS:
+            self.groups[name].param_groups[0]["params"] = [model.gauss_params[name]]
 
 
 # --------------------------------------------------------------------------- #
@@ -120,85 +126,87 @@ class POGSOptimizer:
 
 @dataclass
 class FeatureCache:
-    dino: torch.Tensor                       # (V, h, w, 64) on CPU
+    dino: torch.Tensor                       # (V, h, w, 64) on CPU, PCA-projected
     masks: List[List[torch.Tensor]]          # per view: list of (H, W) bool, last = negative mask
+    dino_pca: torch.Tensor                   # (384, 64) PCA basis -- saved with the checkpoint
     clip: Optional[ClipPyramid] = None
-    dino_extractor: Optional[DinoExtractor] = None
-    clip_encoder: Optional[OpenCLIPNetwork] = None
 
 
-def build_masks_from_instance_ids(obj_ids: torch.Tensor, max_masks: int = 15) -> List[torch.Tensor]:
-    """Detic stand-in: one boolean mask per visible object instance, plus the
-    'negative mask' (background) that POGS appends last."""
-    ids = torch.unique(obj_ids)
-    masks = []
+def build_masks(
+    obj_ids: torch.Tensor,
+    max_masks: int = 15,
+    background_ids: Sequence[int] = (0,),
+    max_area_frac: float = 1.0 / 3.5,
+    min_pixels: int = 16,
+) -> List[torch.Tensor]:
+    """Detic stand-in. One mask per visible object instance (a detector would
+    not report floor/support surfaces, and the release drops any mask larger
+    than H*W/3.5), followed by the paper's negative mask -- every pixel not
+    covered by an object mask -- which is always LAST."""
+    H, W = obj_ids.shape
+    masks: List[torch.Tensor] = []
     covered = torch.zeros_like(obj_ids, dtype=torch.bool)
-    for i in ids.tolist():
-        if i < 0:
+    bg = set(int(b) for b in background_ids)
+    for i in torch.unique(obj_ids).tolist():
+        if i < 0 or i in bg:
             continue
         m = obj_ids == i
-        if m.sum() < 16:
+        n = int(m.sum())
+        if n < min_pixels or n > max_area_frac * H * W:
             continue
         masks.append(m)
         covered |= m
         if len(masks) >= max_masks - 1:
             break
-    masks.append(~covered)          # negative mask, always last
+    masks.append(~covered)
     return masks
 
 
 @torch.no_grad()
 def precompute_features(
-    capture: CaptureData,
+    capture: Any,
     cfg: POGSConfig,
-    dino_device: Optional[str] = None,
-    build_clip: bool = True,
-    allow_download: bool = True,
+    dino: DinoExtractor,
+    clip: Optional[OpenCLIPNetwork] = None,
     verbose: bool = True,
 ) -> FeatureCache:
-    """Runs DINOv2 (and optionally the CLIP pyramid) over every training view.
-
-    ``dino_device`` lets these run on the *second* T4 while the splat trains on
-    the first -- the parallelisation the paper lists as future work (Sec. VI).
-    """
-    dev = dino_device or cfg.runtime.device
+    """DINOv2 (PCA fitted on the training views), grouping masks, CLIP pyramid."""
     imgs = capture.images.permute(0, 3, 1, 2).contiguous()   # (V, 3, H, W)
-
     t0 = time.time()
-    dino = DinoExtractor(device=dev, pca_dim=cfg.model.gaussian_dim,
-                         max_size=cfg.runtime.dino_max_size, allow_download=allow_download)
     if verbose:
         print(f"[dino] backend={dino.backend} pretrained={dino.is_pretrained}")
+    if not dino.is_pretrained:
+        raise RuntimeError("DINOv2 weights unavailable -- refusing to train on random features")
     dino.fit_pca(imgs, batch=1)
-    feats = []
-    for v in range(imgs.shape[0]):
-        feats.append(dino.pca_feats(imgs[v : v + 1]).squeeze(0).cpu())
+    feats = [dino.pca_feats(imgs[v : v + 1]).squeeze(0).cpu() for v in range(imgs.shape[0])]
     dino_feats = torch.stack(feats)
     if verbose:
         print(f"[dino] {tuple(dino_feats.shape)} in {time.time() - t0:.1f}s")
 
-    masks = [build_masks_from_instance_ids(capture.obj_ids[v], cfg.train.num_random_masks)
-             for v in range(imgs.shape[0])]
+    t = cfg.train
+    masks = [
+        build_masks(capture.obj_masks[v], t.num_random_masks, t.mask_background_ids, t.mask_max_area_frac)
+        for v in range(imgs.shape[0])
+    ]
+    if verbose:
+        n = [len(m) - 1 for m in masks]
+        print(f"[masks] object masks per view: min={min(n)} mean={np.mean(n):.1f} max={max(n)}")
 
-    clip_enc, pyramid = None, None
-    if build_clip:
+    pyramid = None
+    if clip is not None:
+        if not clip.is_pretrained:
+            raise RuntimeError("OpenCLIP weights unavailable -- refusing to distil random language features")
         t0 = time.time()
-        clip_enc = OpenCLIPNetwork(device=dev, clip_n_dims=cfg.model.clip_n_dims,
-                                   allow_download=allow_download)
-        if verbose:
-            print(f"[clip] backend={clip_enc.backend} pretrained={clip_enc.is_pretrained}")
         pyramid = ClipPyramid(
-            clip_enc, (capture.images.shape[1], capture.images.shape[2]),
-            tile_size_range=(cfg.train.clip_scale_min, cfg.train.clip_scale_max),
-            n_scales=cfg.train.num_clip_scales,
-            stride_scaler=cfg.train.patch_stride_scaler, device=dev,
+            clip, (capture.images.shape[1], capture.images.shape[2]),
+            tile_size_range=(t.clip_scale_min, t.clip_scale_max),
+            n_scales=t.num_clip_scales, stride_scaler=t.patch_stride_scaler, device=dino.device,
         )
         pyramid.build(imgs, verbose=verbose)
         if verbose:
             print(f"[clip] pyramid built in {time.time() - t0:.1f}s")
 
-    return FeatureCache(dino=dino_feats, masks=masks, clip=pyramid,
-                        dino_extractor=dino, clip_encoder=clip_enc)
+    return FeatureCache(dino=dino_feats, masks=masks, dino_pca=dino.get_pca(), clip=pyramid)
 
 
 # --------------------------------------------------------------------------- #
@@ -219,16 +227,8 @@ class TrainLog:
     psnr: List[float] = field(default_factory=list)
     n_gauss: List[int] = field(default_factory=list)
 
-    def __getitem__(self, key: str):
-        if key == "loss":
-            return self.total
-        return getattr(self, key)
-
-    def get(self, key: str, default=None):
-        try:
-            return self[key]
-        except (AttributeError, KeyError):
-            return default
+    def to_dict(self) -> Dict[str, list]:
+        return {k: list(v) for k, v in self.__dict__.items()}
 
 
 def psnr(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -236,119 +236,95 @@ def psnr(a: torch.Tensor, b: torch.Tensor) -> float:
     return 10.0 * math.log10(1.0 / max(mse, 1e-12))
 
 
+def _make_strategy(model: POGSModel, n_views: int):
+    """gsplat ``DefaultStrategy`` configured exactly like splatfacto does."""
+    from gsplat.strategy import DefaultStrategy
+
+    mc = model.config
+    return DefaultStrategy(
+        prune_opa=mc.cull_alpha_thresh,
+        grow_grad2d=mc.densify_grad_thresh,
+        grow_scale3d=mc.densify_size_thresh,
+        grow_scale2d=mc.split_screen_size,
+        prune_scale3d=mc.cull_scale_thresh,
+        prune_scale2d=mc.cull_screen_size,
+        refine_scale2d_stop_iter=mc.stop_screen_size_at,
+        refine_start_iter=mc.warmup_length,
+        refine_stop_iter=mc.stop_split_at,
+        reset_every=mc.reset_alpha_every * mc.refine_every,
+        refine_every=mc.refine_every,
+        pause_refine_after_reset=n_views + mc.refine_every,
+        absgrad=mc.use_absgrad,
+        revised_opacity=False,
+        verbose=False,
+    )
+
+
 def train_pogs(
     model: POGSModel,
     capture: Any,
-    *args,
-    **kwargs,
+    features: FeatureCache,
+    cfg: POGSConfig,
+    verbose: bool = True,
+    progress: Optional[Callable[[int, int], None]] = None,
 ) -> TrainLog:
-    if len(args) > 0 and isinstance(args[0], FeatureCache):
-        features = args[0]
-        cfg = args[1] if len(args) > 1 else kwargs.get("cfg", POGSConfig())
-        verbose = kwargs.get("verbose", args[2] if len(args) > 2 else True)
-        progress = kwargs.get("progress", args[3] if len(args) > 3 else None)
-    else:
-        dino_fn = args[0] if len(args) > 0 else kwargs.get("dino_fn", None)
-        clip_fn = args[1] if len(args) > 1 else kwargs.get("clip_fn", None)
-        train_cfg = args[2] if len(args) > 2 else kwargs.get("cfg", None)
-        dev = kwargs.get("device", "cuda:0" if torch.cuda.is_available() else "cpu")
-        verbose = kwargs.get("verbose", True)
-        progress = kwargs.get("progress", None)
-
-        full_cfg = POGSConfig()
-        full_cfg.runtime.device = dev
-        if isinstance(train_cfg, TrainConfig):
-            full_cfg.train = train_cfg
-        elif hasattr(train_cfg, "train"):
-            full_cfg = train_cfg
-        elif hasattr(train_cfg, "max_num_iterations") or hasattr(train_cfg, "max_steps"):
-            full_cfg.train = train_cfg
-
-        cfg = full_cfg
-
-        # Process capture views
-        imgs = capture.images.permute(0, 3, 1, 2).contiguous()
-        if hasattr(dino_fn, "fit_pca") and getattr(dino_fn, "pca_matrix", None) is None:
-            dino_fn.fit_pca(imgs, batch=1)
-
-        feats = []
-        for v in range(imgs.shape[0]):
-            f = dino_fn(imgs[v : v + 1])
-            if f.dim() == 4:
-                f = f.squeeze(0)
-            feats.append(f.cpu())
-        dino_feats = torch.stack(feats)
-
-        obj_masks = getattr(capture, "obj_ids", getattr(capture, "obj_masks", None))
-        if obj_masks is not None:
-            masks = [build_masks_from_instance_ids(obj_masks[v], cfg.train.num_random_masks)
-                     for v in range(imgs.shape[0])]
-        else:
-            masks = [[] for _ in range(imgs.shape[0])]
-
-        pyramid = None
-        if clip_fn is not None and isinstance(clip_fn, OpenCLIPNetwork) and getattr(clip_fn, "is_pretrained", False):
-            pyramid = ClipPyramid(
-                clip_fn, (capture.images.shape[1], capture.images.shape[2]),
-                tile_size_range=(cfg.train.clip_scale_min, cfg.train.clip_scale_max),
-                n_scales=min(cfg.train.num_clip_scales, 5),
-                stride_scaler=cfg.train.patch_stride_scaler, device=dev,
-            )
-            pyramid.build(imgs, verbose=verbose)
-
-        features = FeatureCache(
-            dino=dino_feats,
-            masks=masks,
-            clip=pyramid,
-            dino_extractor=dino_fn if isinstance(dino_fn, DinoExtractor) else None,
-            clip_encoder=clip_fn if isinstance(clip_fn, OpenCLIPNetwork) else None,
-        )
-
-    device = cfg.runtime.device if hasattr(cfg, "runtime") else "cuda:0"
-    t = cfg.train if hasattr(cfg, "train") else cfg
-    mc = cfg.model if hasattr(cfg, "model") else ModelConfig()
+    device = cfg.runtime.device
+    t, mc = cfg.train, cfg.model
     opt = POGSOptimizer(model, cfg)
     log = TrainLog()
-    rng = np.random.default_rng(getattr(t, "seed", 42))
-    torch.manual_seed(getattr(t, "seed", 42))
+    rng = np.random.default_rng(t.seed)
+    torch.manual_seed(t.seed)
+    random.seed(t.seed)
 
-    V = capture.n_views() if hasattr(capture, "n_views") else len(capture.images)
-    render_scale = min(1.0, t.render_width / capture.images.shape[2])
+    V = len(capture.cameras)
+    use_strategy = model.backend == "gsplat"
+    strategy = strategy_state = None
+    if use_strategy:
+        strategy = _make_strategy(model, V)
+        strategy.check_sanity(model.gauss_params, opt.gauss_optimizers())
+        strategy_state = strategy.initialize_state(scene_scale=1.0)
+    elif verbose:
+        print("  [train] gsplat unavailable -> approximate torch densification")
     raster_kwargs = dict(
         max_per_tile=cfg.runtime.torch_raster_max_per_tile,
         tile_chunk=cfg.runtime.torch_raster_tile_chunk,
     ) if model.backend == "torch" else {}
 
+    H, W = capture.images.shape[1], capture.images.shape[2]
+    dh, dw = get_img_resolution(H, W, 14, cfg.runtime.dino_max_size)
+    dino_hw_late = (mc.dino_rescale_factor * (dh // 14), mc.dino_rescale_factor * (dw // 14))
+
+    unseen: List[int] = list(range(V))
     model.train()
     t_start = time.time()
     for step in range(t.max_num_iterations):
         model.step = step
-        v = int(rng.integers(0, V))
+        v = unseen.pop(int(rng.integers(0, len(unseen))))
+        if not unseen:
+            unseen = list(range(V))
         cam = capture.cameras[v].to(device)
-        if render_scale < 1.0:
-            cam = cam.rescale(render_scale)
         gt_rgb = capture.images[v].to(device)
         gt_depth = capture.depths[v].to(device).unsqueeze(-1)
-        if render_scale < 1.0:
-            gt_rgb = F.interpolate(gt_rgb.permute(2, 0, 1)[None], size=(cam.height, cam.width),
-                                   mode="bilinear", align_corners=False)[0].permute(1, 2, 0)
-            gt_depth = F.interpolate(gt_depth.permute(2, 0, 1)[None], size=(cam.height, cam.width),
-                                     mode="nearest")[0].permute(1, 2, 0)
 
         use_dino = step > t.dino_step
         use_lang = step > t.lerf_step and features.clip is not None
         opt.zero_grad(step)
 
+        bg = torch.rand(3, device=device) if mc.random_background else None
         out = model.get_outputs(
             cam, render_dino=use_dino, render_hash=use_lang,
-            hash_downscale=t.clip_downscale_factor, raster_kwargs=raster_kwargs
+            hash_downscale=t.clip_downscale_factor,
+            dino_hw=dino_hw_late if use_lang else None,
+            background=bg, raster_kwargs=raster_kwargs,
         )
+        if use_strategy:
+            strategy.step_pre_backward(model.gauss_params, opt.gauss_optimizers(), strategy_state, step, out["info"])
 
-        # ---- photometric ------------------------------------------------- #
+        # ---- photometric (splatfacto) ------------------------------------ #
         loss = L.rgb_loss(out["rgb"], gt_rgb, mc.ssim_lambda)
         l_rgb = float(loss.detach())
 
-        # ---- depth (Pearson) --------------------------------------------- #
+        # ---- depth (Pearson, Sec. IV-B ref [48]) ------------------------- #
         l_depth = 0.0
         if mc.depth_loss_type != "none":
             dl = L.depth_loss(gt_depth, out["depth"], mc.depth_loss_type)
@@ -358,22 +334,17 @@ def train_pogs(
         # ---- DINO distillation ------------------------------------------- #
         l_dino, l_nnv = 0.0, 0.0
         if use_dino:
-            gt_d = features.dino[v].to(device)
-            dl = L.dino_loss(out["dino"], gt_d)
+            dl = L.dino_loss(out["dino"], features.dino[v].to(device))
             loss = loss + dl
             l_dino = float(dl.detach())
             if step > t.dino_step + t.dino_nn_delay:
-                nn_ids = model.ensure_nearest_ids(3)
-                nnv = L.dino_nn_variance_loss(model.gauss_params["dino_feats"], nn_ids)
+                nnv = L.dino_nn_variance_loss(model.gauss_params["dino_feats"], model.ensure_nearest_ids())
                 loss = loss + nnv
-                # summed over every gaussian, so this dominates the printed total
-                # once it switches on -- exactly as in the official get_loss_dict
                 l_nnv = float(nnv.detach())
 
         # ---- language + grouping ----------------------------------------- #
         l_clip, l_group = 0.0, 0.0
         if use_lang:
-            # already rendered at 1/clip_downscale_factor, as in the official code
             hs = out["hashgrid"]
             clip_H, clip_W = hs.shape[:2]
             hs_ds = hs.reshape(-1, hs.shape[-1])
@@ -381,30 +352,25 @@ def train_pogs(
             sel = torch.randperm(n_pix, device=device)[: max(1, int(n_pix * 0.9))]
 
             scale = float(rng.uniform(t.clip_scale_min, t.clip_scale_max))
-            # LERF scale conditioning, verbatim from ``pogs.py``:
-            #   clip_scale = curr_scale * clip_H * (depth / camera.fy)
-            # where ``clip_H`` is the *downscaled* render height and ``fy`` the
-            # full-resolution focal length.
+            # clip_scale = curr_scale * clip_H * (depth / fy)   (pogs.py)
             depth_ds = F.interpolate(
                 out["depth"].permute(2, 0, 1)[None], size=(clip_H, clip_W), mode="nearest"
             )[0].permute(1, 2, 0).reshape(-1, 1)[sel].detach()
             clip_scale = scale * clip_H * depth_ds / cam.fy
 
             clip_pred = model.gaussian_field.clip_from_hash(hs_ds[sel], clip_scale)
-            gt_clip = features.clip.sample(v, scale, (clip_H, clip_W))
-            gt_clip = gt_clip.reshape(-1, gt_clip.shape[-1])[sel.to(gt_clip.device)]
+            gt_clip = features.clip.sample(v, scale, (clip_H, clip_W)).to(device)
+            gt_clip = gt_clip.reshape(-1, gt_clip.shape[-1])[sel]
             cl = L.clip_loss(clip_pred, gt_clip, mc.clip_loss_weight)
             loss = loss + cl
             l_clip = float(cl.detach())
 
-            inst = model.gaussian_field.instance_from_hash(hs_ds[sel]).cpu()
+            inst = model.gaussian_field.instance_from_hash(hs_ds[sel])
             mk = []
             for m in features.masks[v]:
-                mm = F.interpolate(m[None, None].float(), size=(clip_H, clip_W), mode="nearest")[0, 0]
-                mk.append(mm.reshape(-1)[sel.cpu()] > 0.5)
-            gl = L.instance_contrastive_loss(
-                inst, mk, mc.min_mask_screensize, n_dims=mc.instance_n_dims
-            )
+                mm = F.interpolate(m[None, None].float().to(device), size=(clip_H, clip_W), mode="nearest")[0, 0]
+                mk.append(mm.reshape(-1)[sel] > 0.5)
+            gl = L.instance_contrastive_loss(inst, mk, mc.min_mask_screensize, n_dims=mc.instance_n_dims)
             if gl is not None:
                 loss = loss + gl
                 l_group = float(gl.detach())
@@ -414,23 +380,28 @@ def train_pogs(
             loss = loss + L.scale_regularization(model.gauss_params["scales"], mc.max_gauss_ratio)
 
         loss.backward()
-        model.accumulate_grad_stats(out)
+        if not use_strategy:
+            model.accumulate_grad_stats(out)
         opt.step(step)
 
-        # ---- densify / cull ---------------------------------------------- #
-        if (
-            step >= mc.warmup_length
-            and step % mc.refine_every == 0
-            and step <= mc.stop_split_at
+        # ---- densify / prune --------------------------------------------- #
+        n_before = model.num_points
+        if use_strategy:
+            strategy.step_post_backward(model.gauss_params, opt.gauss_optimizers(), strategy_state, step, out["info"], packed=False)
+        elif (
+            step > mc.warmup_length and step % mc.refine_every == 0 and step < mc.stop_split_at
+            and step % (mc.reset_alpha_every * mc.refine_every) >= V + mc.refine_every
         ):
-            model.refinement_step(opt, verbose=verbose and cfg.train.log_every <= mc.refine_every)
+            model.refinement_step(opt)
             opt.rebind(model)
-            if (step // mc.refine_every) % mc.reset_alpha_every == 0 and step > 0:
-                model.reset_opacities(opt)
+        if not use_strategy and step < mc.stop_split_at and step > 0 and step % (mc.reset_alpha_every * mc.refine_every) == 0:
+            model.reset_opacities(opt)
+        if model.num_points != n_before or (step % mc.refine_every == 0):
+            model.nearest_ids = None
 
         if step % t.log_every == 0 or step == t.max_num_iterations - 1:
             with torch.no_grad():
-                p = psnr(out["rgb"].detach(), gt_rgb)
+                p = psnr(out["rgb"].detach(), gt_rgb) if bg is None else float("nan")
             log.step.append(step)
             log.total.append(float(loss.detach()))
             log.rgb.append(l_rgb)
@@ -445,8 +416,8 @@ def train_pogs(
                 print(
                     f"  [{step:5d}/{t.max_num_iterations}] loss={float(loss.detach()):.4f} "
                     f"rgb={l_rgb:.4f} depth={l_depth:.4f} dino={l_dino:.4f} "
-                    f"clip={l_clip:.3f} grp={l_group:.3f} nnv={l_nnv:.2f} "
-                    f"psnr={p:.2f} N={model.num_points}"
+                    f"clip={l_clip:.3f} grp={l_group:.3f} nnv={l_nnv:.3f} "
+                    f"N={model.num_points} ({time.time() - t_start:.0f}s)"
                 )
         if progress is not None:
             progress(step, t.max_num_iterations)
@@ -455,3 +426,21 @@ def train_pogs(
     if verbose:
         print(f"  training done in {time.time() - t_start:.1f}s, {model.num_points} gaussians")
     return log
+
+
+@torch.no_grad()
+def evaluate_views(model: POGSModel, capture: Any, cfg: POGSConfig) -> Dict[str, float]:
+    """PSNR / depth error over the training views with the eval background."""
+    model.eval()
+    ps, de = [], []
+    rk = dict(max_per_tile=cfg.runtime.torch_raster_max_per_tile,
+              tile_chunk=cfg.runtime.torch_raster_tile_chunk) if model.backend == "torch" else {}
+    for v in range(len(capture.cameras)):
+        out = model.get_outputs(capture.cameras[v].to(cfg.runtime.device), rgb_only=True, raster_kwargs=rk)
+        gt = capture.images[v].to(cfg.runtime.device)
+        ps.append(psnr(out["rgb"], gt))
+        gd = capture.depths[v].to(cfg.runtime.device)
+        m = (gd > 0) & (out["accumulation"][..., 0] > 0.5)
+        if m.any():
+            de.append(float((out["depth"][..., 0][m] - gd[m]).abs().mean()))
+    return {"psnr_mean": float(np.mean(ps)), "depth_mae_m": float(np.mean(de)) if de else float("nan")}

@@ -1,8 +1,0 @@
-| Method        | Scenario   |   Mean Pos Error (cm) |   Median Pos Error (cm) |   Max Pos Error (cm) |   FPS |   Total Time (s) |
-|:--------------|:-----------|----------------------:|------------------------:|---------------------:|------:|-----------------:|
-| Base POGS     | Respected  |                 19.96 |                   22.02 |                32.08 |   0.1 |           204.09 |
-| Base POGS     | Threshold  |                 36.85 |                   37.9  |                51.51 |   0.1 |           192.66 |
-| Base POGS     | Violated   |                 22.27 |                   22.89 |                34.87 |   0.1 |           193.69 |
-| POGS + Kalman | Respected  |                 17.83 |                   21.54 |                24.68 |   0.1 |           195.78 |
-| POGS + Kalman | Threshold  |                 29.97 |                   33.25 |                44.8  |   0.1 |           195.36 |
-| POGS + Kalman | Violated   |                 20.42 |                   21.38 |                31.55 |   0.1 |           195.02 |

@@ -227,6 +227,9 @@ class RigidGroupOptimizer:
         self._label_safe = torch.where(self.group_labels >= 0, self.group_labels,
                                        torch.zeros_like(self.group_labels))
         self._tracked = self.group_labels >= 0
+        # Gaussian index lists, so a render only transforms what it draws.
+        self._idx_tracked = torch.nonzero(self._tracked).squeeze(-1)
+        self._idx_obj = [torch.nonzero(groups.group_masks[k]).squeeze(-1) for k in range(self.K)]
 
         self.part_deltas = torch.nn.Parameter(identity_posevec(self.K, self.device))
         self.part_optimizer = torch.optim.Adam([self.part_deltas], lr=config.pose_lr)
@@ -239,6 +242,8 @@ class RigidGroupOptimizer:
         self.n_depth_fallback = 0
         self.n_depth_dropped = 0
         self.n_depth_used = 0
+        self.n_roi_fallback = 0
+        self.n_roi_lost = 0
 
     # ------------------------------------------------------------------ #
     # geometry
@@ -297,38 +302,47 @@ class RigidGroupOptimizer:
         obj_id: Optional[int],
         want_dino: bool,
     ) -> Dict[str, torch.Tensor]:
-        means, quats = self.transformed_geometry(part_deltas)
+        """``model.get_outputs(camera, tracking=True, obj_id=...)`` with the
+        proposed pose applied differentiably."""
         if obj_id is not None:
-            sel = self.groups.group_masks[obj_id]
-            means, quats = means[sel], quats[sel]
+            sel = self._idx_obj[obj_id]
+        elif not self.config.render_untracked:
+            # the release keeps only the selected objects' Gaussians (keep_inds)
+            sel = self._idx_tracked
+        else:
+            sel = None
+        if sel is not None:
+            means, quats = apply_group_deltas(self.init_p2w, part_deltas, self._label_safe[sel],
+                                              self.init_means[sel], self.init_quats[sel])
             scales, opac = self.init_scales[sel], self.init_opacities[sel]
             colors, dino = self.init_colors[sel], self.init_dino[sel]
         else:
+            means, quats = self.transformed_geometry(part_deltas)
             scales, opac = self.init_scales, self.init_opacities
             colors, dino = self.init_colors, self.init_dino
 
+        aa = self.model.config.rasterize_mode == "antialiased"
         out = rasterize(
             means, quats, scales, opac, colors, camera,
-            backend=self.model.backend, sh_degree=self.model.config.sh_degree,
+            backend=self.model.backend, sh_degree=self.model.sh_degree_to_use(),
             render_depth=True, background=self.model.background_color,
-            tile_size=8, antialiased=True, **self.raster_kwargs,
+            tile_size=8, antialiased=aa, **self.raster_kwargs,
         )
-        res = {
-            "rgb": torch.clamp(out["render"], 0, 1),
-            "depth": out["depth"],
-            "accumulation": out["alpha"],
-        }
+        alpha = out["alpha"]
+        depth = torch.where(alpha > 0, out["depth"], out["depth"].detach().max())
+        res = {"rgb": torch.clamp(out["render"], 0, 1), "depth": depth, "accumulation": alpha}
         if want_dino:
+            # release: quats / scales / opacities detached in the DINO render
             f = rasterize(
-                means, quats, scales, opac, dino, camera,
+                means, quats.detach(), scales, opac, dino, camera,
                 backend=self.model.backend, sh_degree=None, render_depth=False,
-                background=None, tile_size=8, antialiased=True, **self.raster_kwargs,
+                background=None, tile_size=8, antialiased=aa, **self.raster_kwargs,
             )
             a = torch.clamp(f["alpha"], min=1e-6)
             feat = torch.where(f["alpha"] > 0, f["render"] / a.detach(), torch.zeros_like(f["render"]))
             feat = self.model.nn(feat.reshape(-1, feat.shape[-1])).reshape(*feat.shape[:-1], -1)
-            # Official POGS (pogs.py line 522): zero out features where alpha is low
-            feat = torch.where(f["alpha"] > 0.5, feat, torch.zeros_like(feat))
+            # pogs.py (eval mode): dino_feats[dino_alpha < 0.8] = 0
+            feat = torch.where(f["alpha"] >= self.config.dino_alpha_thresh, feat, torch.zeros_like(feat))
             res["dino"] = feat
         return res
 
@@ -338,12 +352,16 @@ class RigidGroupOptimizer:
 
     @torch.no_grad()
     def render_mask(self, camera: PinholeCamera, obj_id: int) -> torch.Tensor:
+        """Release: ``accumulation > 0.9``, raising 'Object left ROI' when empty.
+        We fall back to half the peak accumulation before giving up (counted in
+        ``n_roi_fallback``) instead of crashing the run."""
         out = self._render(camera, self.part_deltas.data, obj_id, want_dino=False)
-        thresh = min(0.6, self.config.accumulation_thresh)
-        m = out["accumulation"].squeeze(-1) > thresh
+        acc = out["accumulation"].squeeze(-1)
+        m = acc > self.config.render_mask_thresh
         if not bool(m.any()):
-            m = out["accumulation"].squeeze(-1) > (0.5 * float(out["accumulation"].max()))
-        if not bool(m.any()):
+            self.n_roi_fallback += 1
+            m = acc > (0.5 * float(acc.max()))
+        if not bool(m.any()) or float(acc.max()) < 1e-3:
             raise RuntimeError(f"object {obj_id} left the ROI")
         return m
 
@@ -374,6 +392,7 @@ class RigidGroupOptimizer:
                 try:
                     roi = self.calculate_roi(i, frame.frame.camera)
                 except RuntimeError:
+                    self.n_roi_lost += 1
                     roi = (0.0, 1.0, 0.0, 1.0)
                 frame.add_roi(*roi)
         self.frame = frame
@@ -585,10 +604,12 @@ class RigidGroupOptimizer:
                 try:
                     fine_obs.add_roi(*self.calculate_roi(i, fine_obs.frame.camera))
                 except RuntimeError:
+                    self.n_roi_lost += 1
                     fine_obs.add_roi(0.0, 1.0, 0.0, 1.0)
         self.frame = fine_obs
+        init_depth = cfg.use_depth if cfg.init_use_depth is None else cfg.init_use_depth
         fine_loss, best_poses = try_opt(
-            best_poses, cfg.init_niter_fine, use_depth=cfg.use_depth, use_roi=cfg.use_roi
+            best_poses, cfg.init_niter_fine, use_depth=init_depth, use_roi=cfg.use_roi
         )
 
         self.part_deltas = torch.nn.Parameter(best_poses)
@@ -613,8 +634,8 @@ class RigidGroupOptimizer:
         stats: Dict[str, float] = {}
         loss_val = float("nan")
         for i in range(niter):
-            # exponential decay from pose_lr to pose_lr_final across the niter steps
-            lr = cfg.pose_lr * (cfg.pose_lr_final / cfg.pose_lr) ** (i / max(niter - 1, 1))
+            # nerfstudio ExponentialDecayScheduler(lr_final=pose_lr_final, max_steps=niter)
+            lr = cfg.pose_lr * (cfg.pose_lr_final / cfg.pose_lr) ** (i / max(niter, 1))
             for g in self.part_optimizer.param_groups:
                 g["lr"] = lr
             with torch.no_grad():
@@ -670,6 +691,8 @@ class RigidGroupOptimizer:
             "depth_dropped": float(self.n_depth_dropped),
             "depth_drop_rate": self.n_depth_dropped / max(total, 1),
             "accum_fallbacks": float(self.n_depth_fallback),
+            "roi_mask_fallbacks": float(self.n_roi_fallback),
+            "roi_lost": float(self.n_roi_lost),
         }
 
     @torch.no_grad()

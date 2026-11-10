@@ -1,13 +1,18 @@
-# Data Results Directory
+# Results
 
-Stores tracking outputs, ablation tables, trajectory logs, and speed benchmark results.
+```
+benchmark_runs/<case>/<method>/   shared run cache (every experiment reads/writes here)
+    telemetry.json                per frame: timings, loss, per-object errors, pred / GT poses
+    part_deltas.npy               (F, K, 7) optimised pose deltas
+    row.json                      the summary row of this run
+v1_base_pogs/  v2_kalman/  v3_objects/
+    summary.md                    one table per benchmark factor (levels x methods,
+                                  mean ± std over seeds) + overall means; always
+                                  includes the "Static (no motion)" baseline
+    summary.csv                   one row per (case, method)
+    videos/                       dashboards for seed 0 (experiments/visuals.py)
+v1_base_pogs/ablations/           paper ablations (No Depth, No DINO) on `base`
+```
 
-## Subdirectories:
-- `v1_baseline/`:
-  - `tracking_results.csv`: Benchmark across respected, threshold, and violated scenarios.
-  - `ablations.csv`: No Depth, No DINO, and full POGS comparison.
-  - `part_deltas_traj__*.npy`: 6-DoF predicted trajectory matrices ($T \times K \times 4 \times 4$).
-- `v2_kalman_opt/`:
-  - `comparison_v1_vs_v2.csv`: Direct delta comparison between v1 baseline and v2.
-  - `speed_study.csv`: Tracking rate (Hz) and error across 25, 15, and 8 iterations.
-  - `kalman_sweep.csv`: Start-step engagement sweep (0, 2, 5, 10, 20).
+A case is `<condition>_s<seed>__<speed>x_<depth>`. A method name is a cache key:
+the same name must always mean the same settings.

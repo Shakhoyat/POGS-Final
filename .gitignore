@@ -52,3 +52,7 @@ build/
 dist/
 *.egg-info/
 .eggs/
+
+# Generated data (regenerate with the scripts in scene_generator/ and experiments/)
+datasets/synthetic_scenes/
+model_checkpoints/*/

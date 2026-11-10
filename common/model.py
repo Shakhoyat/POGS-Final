@@ -10,10 +10,10 @@ and a shared ``GaussianField`` maps position -> {CLIP-512, grouping-128}.
 Rendering goes through the same rasteriser for every modality, which is what
 lets the tracker compare *rendered* DINO features against *observed* ones.
 
-Ported from ``pogs/pogs.py`` (which subclasses nerfstudio's ``SplatfactoModel``);
-the densification/pruning schedule follows splatfacto with a backend-robust
-percentile threshold in place of the raw gradient threshold, because the units
-of ``means2d.grad`` differ between gsplat versions and the pure-torch backend.
+Ported from ``pogs/pogs.py`` (which subclasses nerfstudio's ``SplatfactoModel``).
+Densification uses gsplat's ``DefaultStrategy`` with splatfacto's settings when
+the gsplat backend is available (exactly what the release does); the pure-torch
+fallback re-implements the same thresholds approximately (``refinement_step``).
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ class POGSModel(nn.Module):
                 "features_dc": nn.Parameter(fdc),
                 "features_rest": nn.Parameter(frest),
                 "opacities": nn.Parameter(torch.logit(0.1 * torch.ones(N, 1, device=device))),
-                "dino_feats": nn.Parameter(torch.randn(N, config.gaussian_dim, device=device) * 0.1),
+                "dino_feats": nn.Parameter(torch.randn(N, config.gaussian_dim, device=device) * config.dino_init_std),
             }
         )
 
@@ -195,13 +195,23 @@ class POGSModel(nn.Module):
         render_dino: bool = True,
         render_hash: bool = False,
         hash_downscale: int = 1,
-        detach_geometry_for_dino: bool = True,
+        dino_hw: Optional[Tuple[int, int]] = None,
+        background: Optional[torch.Tensor] = None,
         tile_size: int = 16,
         raster_kwargs: Optional[dict] = None,
     ) -> Dict[str, torch.Tensor]:
+        """Mirror of ``POGSModel.get_outputs`` in ``pogs/pogs.py``.
+
+        ``dino_hw``: resolution of the DINO render. ``None`` renders at the camera
+        resolution (what the release does before ``lerf_step`` and while
+        tracking); the trainer passes ``dino_rescale_factor * (h // 14)`` after
+        ``lerf_step``, as the release does.
+        """
         rk = raster_kwargs or {}
         crop = self._crop_ids(obj_id)
         gp = self.gauss_params
+        aa = self.config.rasterize_mode == "antialiased"
+        bg = self.background_color if background is None else background
 
         def _sel(t):
             return t if crop is None else t[crop]
@@ -215,54 +225,60 @@ class POGSModel(nn.Module):
         out = rasterize(
             means, quats, scales, opac, colors, camera,
             backend=self.backend, sh_degree=self.sh_degree_to_use(),
-            render_depth=True, background=self.background_color,
-            tile_size=tile_size, antialiased=self.config.rasterize_mode == "antialiased", **rk,
+            render_depth=True, background=bg, tile_size=tile_size,
+            antialiased=aa, absgrad=self.training and self.config.use_absgrad, **rk,
         )
+        alpha = out["alpha"]
+        depth = out["depth"]
+        # official: depth where nothing was hit is set to the max rendered depth
+        depth = torch.where(alpha > 0, depth, depth.detach().max())
         outputs: Dict[str, torch.Tensor] = {
             "rgb": torch.clamp(out["render"], 0.0, 1.0),
-            "depth": out["depth"],
-            "accumulation": out["alpha"],
-            "background": self.background_color,
+            "depth": depth,
+            "accumulation": alpha,
+            "background": bg,
             "means2d": out["means2d"],
             "radii": out["radii"],
             "visible": out["visible"],
+            "info": out.get("info", {}),
             "crop_ids": crop,
         }
         if rgb_only:
             return outputs
 
         # ---- DINO feature render (Sec. IV-B / IV-D) ---------------------- #
+        # Geometry is detached during training so the DINO loss never moves the
+        # Gaussians; while tracking the means stay attached (pose gradients).
+        # quats / scales / opacities are always detached, as in the release.
         if render_dino:
             dino = _sel(gp["dino_feats"])
-            g_means = means.detach() if detach_geometry_for_dino else means
+            g_means = means.detach() if self.training else means
+            dcam = camera
+            if dino_hw is not None and (dino_hw[0] != camera.height or dino_hw[1] != camera.width):
+                dcam = camera.rescale_to(dino_hw[0], dino_hw[1])
             f = rasterize(
-                g_means, quats.detach(), scales.detach(), opac.detach(), dino, camera,
+                g_means, quats.detach(), scales.detach(), opac.detach(), dino, dcam,
                 backend=self.backend, sh_degree=None, render_depth=False,
-                background=None, tile_size=tile_size,
-                antialiased=self.config.rasterize_mode == "antialiased", **rk,
+                background=None, tile_size=tile_size, antialiased=aa, **rk,
             )
-            feat, alpha = f["render"], f["alpha"]
-            alpha_c = torch.clamp(alpha, min=1e-6)
-            feat = torch.where(alpha > 0, feat / alpha_c.detach(), torch.zeros_like(feat))
+            feat, a = f["render"], f["alpha"]
+            feat = torch.where(a > 0, feat / torch.clamp(a, min=1e-6).detach(), torch.zeros_like(feat))
             feat = self.nn(feat.reshape(-1, self.config.gaussian_dim)).reshape(*feat.shape[:-1], -1)
             if not self.training:
-                feat = feat * (alpha >= 0.8).to(feat.dtype)
+                feat = feat * (a >= 0.8).to(feat.dtype)
             outputs["dino"] = feat
-            outputs["dino_alpha"] = alpha
+            outputs["dino_alpha"] = a
 
         # ---- hash-grid render, consumed by the CLIP / grouping heads ------ #
         if render_hash:
             h = self.gaussian_field.get_hash(gp["means"])
             h = h if crop is None else h[crop]
-            # The official code rescales the camera by 1/clip_downscale_factor
-            # before this pass (``pogs.py``: ``camera.rescale_output_resolution``),
-            # so the 96-channel hash is never rasterised at full resolution.
+            # rendered at 1/clip_downscale_factor, as in the release
             cam_h = camera if hash_downscale <= 1 else camera.rescale(1.0 / hash_downscale)
             hf = rasterize(
                 means.detach(), quats.detach(), scales.detach(), opac.detach(), h, cam_h,
                 backend=self.backend, sh_degree=None, render_depth=False,
-                background=None, tile_size=tile_size,
-                antialiased=self.config.rasterize_mode == "antialiased", **rk,
+                background=None, tile_size=tile_size, antialiased=aa, **rk,
             )
             outputs["hashgrid"] = hf["render"]
             outputs["hash_alpha"] = hf["alpha"]
@@ -274,25 +290,31 @@ class POGSModel(nn.Module):
 
     @torch.no_grad()
     def accumulate_grad_stats(self, outputs: Dict[str, torch.Tensor]) -> None:
+        """Pure-torch fallback only (gsplat runs ``DefaultStrategy`` instead).
+        Normalises the screen-space gradient the way gsplat / splatfacto do."""
         m2d = outputs.get("means2d")
         if m2d is None or m2d.grad is None:
             return
-        grads = m2d.grad.detach().norm(dim=-1).squeeze(0)
+        H, W = outputs["rgb"].shape[:2]
+        g = m2d.grad.detach().reshape(-1, 2).clone()
+        g[:, 0] *= W / 2.0
+        g[:, 1] *= H / 2.0
+        grads = g.norm(dim=-1)
         vis = outputs["visible"]
         if vis is None:
             vis = grads > 0
         crop = outputs.get("crop_ids")
         if crop is not None:
             full = torch.zeros(self.num_points, device=grads.device)
-            fullv = torch.zeros(self.num_points, device=grads.device)
+            fullv = torch.zeros(self.num_points, device=grads.device, dtype=torch.bool)
             full[crop] = grads
-            fullv[crop] = vis.float()
-            grads, vis = full, fullv > 0
+            fullv[crop] = vis
+            grads, vis = full, fullv
         if self.xys_grad_norm is None or self.xys_grad_norm.shape[0] != self.num_points:
             self.xys_grad_norm = torch.zeros(self.num_points, device=grads.device)
             self.vis_counts = torch.zeros(self.num_points, device=grads.device)
             self.max_2d_size = torch.zeros(self.num_points, device=grads.device)
-        self.xys_grad_norm += grads
+        self.xys_grad_norm += grads * vis.float()
         self.vis_counts += vis.float()
         radii = outputs.get("radii")
         if radii is not None:
@@ -301,8 +323,7 @@ class POGSModel(nn.Module):
                 fr = torch.zeros(self.num_points, device=r.device)
                 fr[crop] = r
                 r = fr
-            denom = max(outputs["rgb"].shape[0], outputs["rgb"].shape[1])
-            self.max_2d_size = torch.maximum(self.max_2d_size, r / denom)
+            self.max_2d_size = torch.maximum(self.max_2d_size, r / float(max(H, W)))
 
     def _resize_params(self, keep: Optional[torch.Tensor], extra: Optional[Dict[str, torch.Tensor]], optimizer) -> None:
         """Apply a keep-mask and/or append new Gaussians, keeping Adam state
@@ -326,76 +347,63 @@ class POGSModel(nn.Module):
             new_p = nn.Parameter(new_params[name].contiguous())
             if state is not None and "exp_avg" in state:
                 for key in ("exp_avg", "exp_avg_sq"):
-                    s = state[key]
+                    s_ = state[key]
                     if keep is not None:
-                        s = s[keep]
+                        s_ = s_[keep]
                     if extra is not None and name in extra:
-                        s = torch.cat([s, torch.zeros_like(extra[name])], dim=0)
-                    state[key] = s
+                        s_ = torch.cat([s_, torch.zeros_like(extra[name])], dim=0)
+                    state[key] = s_
                 del opt_state[old]
                 opt_state[new_p] = state
             group["params"] = [new_p]
             self.gauss_params[name] = new_p
 
     @torch.no_grad()
-    def refinement_step(self, optimizer, densify_percentile: float = 0.05, verbose: bool = False) -> Dict[str, int]:
-        """One densify + cull pass. Called every ``refine_every`` steps between
-        ``warmup_length`` and ``stop_split_at``."""
+    def refinement_step(self, optimizer, verbose: bool = False) -> Dict[str, int]:
+        """Pure-torch fallback of splatfacto's grow + prune pass (gsplat's
+        ``DefaultStrategy._grow_gs`` / ``_prune_gs``). Not bit-exact: the torch
+        rasteriser exposes plain (not absolute) screen-space gradients."""
         cfg = self.config
         stats = {"split": 0, "dup": 0, "culled": 0}
         if self.xys_grad_norm is None:
             return stats
 
         avg = self.xys_grad_norm / self.vis_counts.clamp(min=1)
-        seen = self.vis_counts > 0
         n_new_budget = max(cfg.max_gaussians - self.num_points, 0)
+        high_grad = avg > cfg.densify_grad_thresh
+        smax = torch.exp(self.scales).max(dim=-1).values
+        is_small = smax <= cfg.densify_size_thresh
+        dup_mask = high_grad & is_small
+        split_mask = high_grad & ~is_small
+        if self.step < cfg.stop_screen_size_at and self.max_2d_size is not None:
+            split_mask = split_mask | (high_grad & (self.max_2d_size > cfg.split_screen_size))
+        n_split, n_dup = int(split_mask.sum()), int(dup_mask.sum())
+        if n_split * cfg.n_split_samples + n_dup > n_new_budget:
+            order = torch.argsort(avg * high_grad.float(), descending=True)
+            allow = torch.zeros_like(high_grad)
+            allow[order[: max(n_new_budget // (cfg.n_split_samples + 1), 0)]] = True
+            split_mask &= allow
+            dup_mask &= allow
+            n_split, n_dup = int(split_mask.sum()), int(dup_mask.sum())
 
-        if n_new_budget > 0 and bool(seen.any()):
-            g = avg[seen]
-            q = torch.quantile(g.float(), 1.0 - densify_percentile) if g.numel() > 1 else g.max()
-            high_grad = seen & (avg >= q)
-            big = torch.exp(self.scales).max(dim=-1).values > cfg.densify_size_thresh
-            if self.max_2d_size is not None:
-                big = big | (self.max_2d_size > cfg.split_screen_size)
+        if n_dup > 0:
+            dup = {k: v.data[dup_mask].clone() for k, v in self.gauss_params.items()}
+            self._resize_params(None, dup, optimizer)
+            split_mask = torch.cat([split_mask, torch.zeros(n_dup, dtype=torch.bool, device=split_mask.device)])
+            stats["dup"] = n_dup
+        if n_split > 0:
+            extra = self._split_gaussians(split_mask, cfg.n_split_samples)
+            # splitting replaces the parent by its children
+            self._resize_params(~split_mask, extra, optimizer)
+            stats["split"] = n_split
 
-            split_mask = high_grad & big
-            dup_mask = high_grad & (~big)
-
-            n_split = int(split_mask.sum().item())
-            n_dup = int(dup_mask.sum().item())
-            if n_split * cfg.n_split_samples + n_dup > n_new_budget:
-                # trim to budget, keeping the highest-gradient candidates
-                order = torch.argsort(avg * high_grad.float(), descending=True)
-                allow = torch.zeros_like(high_grad)
-                allow[order[: max(n_new_budget // (cfg.n_split_samples + 1), 0)]] = True
-                split_mask &= allow
-                dup_mask &= allow
-                n_split = int(split_mask.sum().item())
-                n_dup = int(dup_mask.sum().item())
-
-            extra: Dict[str, torch.Tensor] = {}
-            if n_split > 0:
-                extra = self._split_gaussians(split_mask, cfg.n_split_samples)
-                stats["split"] = n_split
-            if n_dup > 0:
-                dup = {k: v.data[dup_mask].clone() for k, v in self.gauss_params.items()}
-                extra = {k: torch.cat([extra[k], dup[k]], 0) if k in extra else dup[k] for k in dup}
-                stats["dup"] = n_dup
-
-            if extra:
-                # shrink the parents that were split (splatfacto: /1.6)
-                self.gauss_params["scales"].data[split_mask] = torch.log(
-                    torch.exp(self.gauss_params["scales"].data[split_mask]) / 1.6
-                )
-                self._resize_params(None, extra, optimizer)
-
-        # ---- cull ------------------------------------------------------- #
+        # ---- prune ------------------------------------------------------ #
         opac = torch.sigmoid(self.gauss_params["opacities"].data).squeeze(-1)
         cull = opac < cfg.cull_alpha_thresh
         if self.step > cfg.refine_every * cfg.reset_alpha_every:
             cull = cull | (torch.exp(self.gauss_params["scales"].data).max(dim=-1).values > cfg.cull_scale_thresh)
         n_cull = int(cull.sum().item())
-        if n_cull > 0 and n_cull < self.num_points - 128:
+        if 0 < n_cull < self.num_points - 128:
             self._resize_params(~cull, None, optimizer)
             stats["culled"] = n_cull
 
@@ -447,9 +455,12 @@ class POGSModel(nn.Module):
     # helpers used by the loss / clustering
     # ------------------------------------------------------------------ #
 
-    def ensure_nearest_ids(self, k: int = 3) -> torch.Tensor:
+    def ensure_nearest_ids(self, k: Optional[int] = None) -> torch.Tensor:
+        """``k`` neighbours *including* the point itself (official: cuml
+        ``NearestNeighbors(n_neighbors=3)``)."""
+        k = self.config.dino_nn_k if k is None else k
         if self.nearest_ids is None or self.nearest_ids.shape[0] != self.num_points:
-            _, idx = k_nearest(self.gauss_params["means"].data, k, include_self=True)
+            _, idx = k_nearest(self.gauss_params["means"].data, k - 1, include_self=True)
             self.nearest_ids = torch.from_numpy(idx).to(self.gauss_params["means"].device)
         return self.nearest_ids
 

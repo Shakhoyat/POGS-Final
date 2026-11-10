@@ -1,81 +1,59 @@
-# Persistent Object Gaussian Splatting (POGS)
+# Persistent Object Gaussian Splatting (POGS) -- re-implementation
 
-Implementation and research codebase for **Persistent Object Gaussian Splat (POGS) for Tracking Human and Robot Manipulation of Irregularly Shaped Objects** (ICRA 2025).
+Re-implementation of **Persistent Object Gaussian Splat (POGS) for Tracking Human
+and Robot Manipulation of Irregularly Shaped Objects** (Yu, Hari, El-Refai et al.,
+ICRA 2025), validated on a synthetic robot pick-and-place benchmark with exact
+ground truth.
 
-Modularized, decoupled from monolithic notebooks, and structured for reproducible 6-DoF tracking and evaluation.
+`v1` follows the paper and the authors' release (`POGS-author-github/`) as closely
+as possible; `v2` and `v3` are built strictly on top of it. Grasp planning and tool
+servoing are out of scope.
 
----
-
-## Key Features
-
-1. **Standalone Synthetic Scene & Dataset Generator (`scene_generator/`)**:
-   - Closed-form analytic 3D scene raycaster generating hole-free RGB, depth, and instance masks.
-   - Generates Phase 1 multi-view hemisphere scans (35 views) and fused 3D point clouds (`.ply`).
-   - Generates Phase 3 tracking sequences under 4 explicit angle constraint scenarios:
-     - **Respected**: Rotations $\le 30^\circ$ (sub-centimeter tracking).
-     - **Threshold**: Rotations near the $30^\circ$ boundary ($26^\circ - 32^\circ$).
-     - **Violated**: Rotations exceeding $30^\circ$ ($45^\circ - 90^\circ$).
-     - **Servoing**: Tool servoing rotation pulses ($15^\circ$ and $30^\circ$).
-   - Renders side-by-side RGB and Turbo-Depth videos (`.mp4` / `.gif`) with real-time HUD showing rotation angles, translation, hand occlusions, and reset events.
-   - Saves frame-by-frame metadata (`tracking_metadata.json`) and event timelines (`events_timeline.json`).
-
-2. **Common Shared Core (`common/`)**:
-   - Differentiable Gaussian Splatting rasterizer (`gsplat` with pure PyTorch fallback).
-   - Foundation models: DINOv2 tracking features and OpenCLIP language queries.
-   - 2-Phase trainer with densification and opacity resets.
-   - Object clustering into persistent representations.
-   - 6-DoF tracking optimizer (`RigidGroupOptimizer`).
-   - Occluded grasp sampling directly on persistent 3D geometry.
-   - Closed-loop tool visual servoing.
-
-3. **Versioned Experiments (`experiments/`)**:
-   - **`v1_base_pogs`**: Faithful reproduction of the ICRA 2025 baseline on the pick-and-place tabletop benchmark.
-
----
-
-## Directory Structure
+## Layout
 
 ```
-├── common/                  # Core shared POGS algorithms & models
-├── scene_generator/         # Standalone synthetic dataset generator
-├── experiments/             # Versioned experiment suites
-│   └── v1_base_pogs/        # Canonical POGS baseline
-├── datasets/                # Shared datasets (synthetic & real)
-├── model_checkpoints/       # Shared model checkpoints
-├── data_results/            # Experiment CSVs, metrics, and logs
-├── base_notebooks/          # Base exploratory notebooks & references
-├── Claude.md                # Detailed project instructions for AI / humans
-├── RESULTS.md               # Master quantitative results & findings
-└── README.md                # This file
+common/            POGS library: config (release defaults), model, gsplat/torch
+                   rasteriser, feature field, encoders, losses, trainer,
+                   HDBSCAN grouping, rigid-group tracker, SE(3) Kalman filter,
+                   checkpoints, the shared tracking loop + metrics
+scene_generator/   synthetic scenes; pick_place_benchmark.py builds the benchmark
+                   (12 conditions x 3 seeds, + speed / depth-noise at load time)
+experiments/
+  pipeline.py      train -> group -> track -> report (shared by all versions)
+  visuals.py       dashboard videos
+  v1_base_pogs/    base POGS (paper and release settings) + the paper's ablations
+  v2_kalman_pogs/  v1 + constant-velocity SE(3) Kalman motion prior (+ iteration sweep)
+  v3_scene_mustard/ object and multi-object factors (folder name kept for history)
+tests/             regression tests (pose maths, PCA persistence, metrics, ...)
+tools/             gsplat CUDA setup without sudo
+legacy/            unmaintained notebook-era modules (grasping, servoing, old generator)
 ```
 
----
+## Setup
 
-## Quick Start
-
-### 1. Generate Synthetic Pick-and-Place Benchmark
 ```bash
-python -m experiments.v1_base_pogs.generate_dataset
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+tools/setup_gsplat.sh        # builds gsplat's CUDA kernels inside .venv (no sudo)
+.venv/bin/python -m pytest -q tests
 ```
 
-### 2. Train 3D Gaussian Representation
+Without gsplat everything still runs on a pure-PyTorch rasteriser, but about two
+orders of magnitude slower, and densification is only approximate.
+
+## Run
+
 ```bash
-python -m experiments.v1_base_pogs.train
+.venv/bin/python -m experiments.v1_base_pogs.run_all      # data (if missing), train, group, track, videos
+.venv/bin/python -m experiments.v2_kalman_pogs.run_all    # reuses the v1 checkpoint and runs
+.venv/bin/python -m experiments.v3_scene_mustard.run_all  # reuses the v1 checkpoint and runs
+# any of them: --factors rotation speed occlusion depth object multi-object
 ```
 
-### 3. Singulate Target Object via OpenCLIP
-```bash
-python -m experiments.v1_base_pogs.cluster
-```
+Outputs: `model_checkpoints/pick_place_floor_table/` (one self-contained
+checkpoint, including the DINO PCA basis), `data_results/benchmark_runs/` (every
+run, shared and resumable) and `data_results/<version>/` (`summary.md` with one
+table per benchmark factor, `summary.csv`, `videos/`).
 
-### 4. Run Online 6-DoF Tracking Benchmark
-```bash
-python -m experiments.v1_base_pogs.track
-```
-
-### 5. Generate Multi-Panel Telemetry Dashboard Videos
-```bash
-python -m experiments.v1_base_pogs.generate_visuals
-```
-
-For complete instructions and benchmark results, consult [Claude.md](Claude.md), [JOURNEY.md](JOURNEY.md), and [RESULTS.md](RESULTS.md).
+See [RESULTS.md](RESULTS.md) for numbers, [JOURNEY.md](JOURNEY.md) for the audit
+history, and [Claude.md](Claude.md) for implementation notes and deviations from
+the release.

@@ -1,73 +1,29 @@
 """
 POGS configuration.
 
-Every default here is taken from the official POGS release
-(``pogs/pogs_config.py``, ``pogs/pogs.py::POGSModelConfig``,
-``pogs/tracking/rigid_group_optimizer.py::RigidGroupOptimizerConfig``)
-so that the Kaggle re-implementation reproduces the paper's setup.
+Every default is taken from the official POGS release so that ``v1`` reproduces
+the paper's setup:
 
-Reference: Yu, Hari, El-Refai, Dalil, Kerr, Kim, Cheng, Irshad, Goldberg,
-"Persistent Object Gaussian Splat (POGS) for Tracking Human and Robot
-Manipulation of Irregularly Shaped Objects", ICRA 2025.
+* ``pogs/pogs_config.py``                       (trainer + optimiser schedules)
+* ``pogs/pogs.py::POGSModelConfig``             (model; inherits nerfstudio's
+                                                 ``SplatfactoModelConfig``)
+* ``pogs/data/full_images_datamanager.py``      (dino/lerf start steps, masks)
+* ``pogs/tracking/rigid_group_optimizer.py``    (``RigidGroupOptimizerConfig``)
+* ``pogs/tracking/optim.py``                    (``MATCH_RESOLUTION``)
+
+Where we deliberately differ from the released code, the field's docstring says
+so and why. Reference: Yu, Hari, El-Refai et al., "Persistent Object Gaussian
+Splat (POGS) for Tracking Human and Robot Manipulation of Irregularly Shaped
+Objects", ICRA 2025.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Literal, Optional, Tuple
 
 # --------------------------------------------------------------------------- #
-# Scene capture (Sec. IV-A)
-# --------------------------------------------------------------------------- #
-
-
-@dataclass
-class CaptureConfig:
-    """Multi-view hemisphere capture. The paper captures 35 views with a
-    wrist-mounted ZED Mini as the UR5 sweeps a predefined trajectory."""
-
-    num_views: int = 35
-    """Paper: 'We capture images from 35 views'."""
-    image_height: int = 360
-    image_width: int = 640
-    fov_x_deg: float = 62.0
-    """Approximately the ZED Mini HD720 horizontal FoV."""
-    radius_min: float = 0.55
-    radius_max: float = 0.85
-    elevation_min_deg: float = 22.0
-    elevation_max_deg: float = 68.0
-    azimuth_turns: float = 2.5
-    """Number of times the hemisphere spiral wraps around the workspace."""
-    depth_noise_std: float = 0.0035
-    """Simulates RAFT-Stereo disparity error (metres, at 0.7 m range)."""
-    depth_dropout: float = 0.01
-    """Fraction of pixels with invalid stereo depth."""
-    dbscan_eps: float = 0.012
-    """Paper: 'We run DBSCAN on the fused pointcloud to filter noise and
-    floater points.'"""
-    dbscan_min_samples: int = 12
-    max_seed_points: int = 60_000
-    seed: int = 0
-
-    @property
-    def width(self) -> int:
-        return self.image_width
-
-    @width.setter
-    def width(self, val: int):
-        self.image_width = val
-
-    @property
-    def height(self) -> int:
-        return self.image_height
-
-    @height.setter
-    def height(self, val: int):
-        self.image_height = val
-
-
-# --------------------------------------------------------------------------- #
-# Model (POGSModelConfig)
+# Model (POGSModelConfig <- SplatfactoModelConfig)
 # --------------------------------------------------------------------------- #
 
 
@@ -77,19 +33,16 @@ class ModelConfig:
     sh_degree_interval: int = 1000
     gaussian_dim: int = 64
     """'we apply PCA to reduce their dimensionality from several hundred to
-    d = 64 dimensions' (Sec. IV-B, Self-Supervised Features)."""
+    d = 64 dimensions' (Sec. IV-B)."""
     dim: int = 64
-    """Output dimension of the rendered DINO feature map."""
+    """Output dimension of the rendered DINO feature map (``POGSModel.nn``)."""
+    dino_init_std: float = 1.0
+    """Official: ``torch.randn((num_points, gaussian_dim))``."""
     instance_n_dims: int = 128
-    """GaussianField.instance_net output width in the official code."""
     clip_n_dims: int = 512
-    """OpenCLIP ViT-B-16 embedding width."""
     log2_hashmap_size: int = 19
-    """``GaussianField``'s two tcnn HashGrid encodings both use 2^19 in the
-    official config.  With tiny-cuda-nn's per-level cap that is ~140 MB of
-    parameters, which Adam turns into ~560 MB of optimiser state and gradient.
-    Lower it (16 -> ~9 MB) on a memory-constrained host; it is the first knob to
-    reach for if training dies with an allocation failure."""
+    """Both tcnn HashGrids use 2^19 in the official field. Lower it (e.g. 16)
+    only on a memory-constrained host."""
     dino_rescale_factor: int = 5
     min_mask_screensize: float = 0.003
     clip_loss_weight: float = 0.5
@@ -98,41 +51,57 @@ class ModelConfig:
     use_scale_regularization: bool = True
     max_gauss_ratio: float = 3.0
     ssim_lambda: float = 0.2
-    background_color: Tuple[float, float, float] = (0.1412, 0.1412, 0.1412)
-    rasterize_mode: Literal["antialiased", "classic"] = "antialiased"
+    dino_nn_k: int = 3
+    """``cuml NearestNeighbors(n_neighbors=3)`` -- three neighbours *including*
+    the point itself."""
 
-    # densification / pruning (splatfacto defaults used by POGS)
+    background_color: Tuple[float, float, float] = (0.1490, 0.1647, 0.2157)
+    """Background used at eval / tracking time (splatfacto's 'random' preset
+    falls back to this colour outside training)."""
+    random_background: bool = True
+    """Splatfacto ``background_color='random'``: a random colour per training
+    step, which stops the splat from explaining the background with
+    semi-transparent Gaussians. POGS does not override it."""
+    rasterize_mode: Literal["antialiased", "classic"] = "classic"
+    """Splatfacto default; POGS does not override it."""
+
+    # densification / pruning -- splatfacto defaults, POGS overrides split_screen_size
     warmup_length: int = 500
     refine_every: int = 100
     reset_alpha_every: int = 30
-    stop_split_at: int = 2500
-    stop_screen_size_at: int = 2000
+    stop_split_at: int = 15000
+    stop_screen_size_at: int = 4000
     densify_grad_thresh: float = 0.0008
+    use_absgrad: bool = True
     densify_size_thresh: float = 0.01
     split_screen_size: float = 0.025
+    """POGS override (splatfacto: 0.05)."""
     cull_alpha_thresh: float = 0.1
     cull_scale_thresh: float = 0.5
+    cull_screen_size: float = 0.15
     n_split_samples: int = 2
-    max_gaussians: int = 300_000
+    max_gaussians: int = 1_000_000
+    """Only enforced by the pure-torch fallback densifier (gsplat's strategy has
+    no cap, like the official code)."""
 
 
 # --------------------------------------------------------------------------- #
-# Training (TrainerConfig in pogs_config.py)
+# Training (TrainerConfig in pogs_config.py + FullImageDatamanagerConfig)
 # --------------------------------------------------------------------------- #
 
 
 @dataclass
 class TrainConfig:
     max_num_iterations: int = 4000
-    """Paper / README: 'Script used to train the POGS for 4000 steps'."""
+    """README: 'train the POGS for 4000 steps'."""
     dino_step: int = 100
-    """FullImageDatamanagerConfig.dino_step -- when DINO supervision starts."""
+    """DINO supervision starts after this step."""
     lerf_step: int = 2500
-    """FullImageDatamanagerConfig.lerf_step -- when CLIP + grouping start."""
+    """CLIP + grouping supervision start after this step."""
     dino_nn_delay: int = 1000
-    """dino_nn_loss starts at ``dino_step + 1000`` in the official code."""
+    """dino_nn_loss starts at ``dino_step + 1000``."""
 
-    # Learning rates -- verbatim from pogs_config.py optimizers block.
+    # Learning rates -- verbatim from pogs_config.py
     lr_means: float = 1.6e-4
     lr_means_final: float = 1.6e-6
     lr_features_dc: float = 0.0025
@@ -146,24 +115,29 @@ class TrainConfig:
     lr_dino_feats: float = 1e-2
     lr_dino_feats_final: float = 1e-3
     lr_nn_projection: float = 1e-2
+    lr_nn_projection_final: float = 1e-3
 
-    grad_accum_color: int = 10
-    grad_accum_shs: int = 10
     grad_accum_lerf: int = 3
+    """``gradient_accumulation_steps = {'camera_opt': 100, 'color': 10,
+    'shs': 10, 'lerf': 3}``. nerfstudio matches these keys against parameter
+    *group names*; POGS's groups are called ``features_dc`` / ``features_rest``,
+    so ``color`` and ``shs`` match nothing and are no-ops in the release. Only
+    ``lerf`` is effective (camera_opt is unused: synthetic poses are exact)."""
 
     clip_downscale_factor: int = 2
-    """FullImageDatamanagerConfig.clip_downscale_factor"""
     num_clip_scales: int = 10
-    """patch_tile_size_res"""
     clip_scale_min: float = 0.05
     clip_scale_max: float = 0.5
-    """patch_tile_size_range"""
     patch_stride_scaler: float = 0.5
     num_random_masks: int = 15
-    """Number of random masks sampled per step for the contrastive group loss."""
+    """Masks sampled per step for the contrastive group loss."""
+    mask_max_area_frac: float = 1.0 / 3.5
+    """Detic stand-in: the official loader drops masks larger than H*W/3.5."""
+    mask_background_ids: Tuple[int, ...] = (0,)
+    """Instance ids a detector would not report as objects (floor, support
+    table). They join the negative mask, as in the paper ('a negative mask
+    wherever an object mask does not exist')."""
 
-    render_height: int = 360
-    render_width: int = 640
     log_every: int = 100
     seed: int = 0
 
@@ -175,13 +149,6 @@ class TrainConfig:
     def max_steps(self, val: int):
         self.max_num_iterations = val
 
-    @property
-    def refine_every(self) -> int:
-        return getattr(self, "_refine_every", 100)
-
-    @refine_every.setter
-    def refine_every(self, val: int):
-        self._refine_every = val
 
 TrainingConfig = TrainConfig
 
@@ -194,13 +161,31 @@ TrainingConfig = TrainConfig
 @dataclass
 class GroupingConfig:
     cluster_eps: float = 0.012
-    """ViewerSlider("Cluster Eps", 0.012, ...) default in the official code."""
+    """``ViewerSlider("Cluster Eps", 0.012, ...)`` default."""
     min_samples: int = 50
     min_cluster_size: int = 300
     voxel_size: float = 0.0001
     allow_single_cluster: bool = False
     knn_k: int = 3
     """Feature smoothing over 3 nearest neighbours + self (4 total)."""
+    max_cluster_points: int = 25000
+    """CPU-HDBSCAN budget (the release uses cuML on the GPU); see
+    ``grouping.cluster_scene``."""
+    select_method: Literal["geometry", "language"] = "geometry"
+    """How tracked clusters are chosen. The paper uses an interactive click /
+    language query; ``geometry`` drops the floor and support surfaces (the
+    official code removes everything below ``table_z + 0.015``)."""
+    support_z: float = 0.015
+    """Gaussians below this height (metres above the floor) are treated as the
+    support surface and dropped from tracked clusters."""
+    max_footprint_m2: float = 0.06
+    max_share: float = 0.40
+    background_sim_thresh: float = 0.8
+    """Cosine similarity to the negative-mask target (all-ones unit vector)
+    above which a cluster is background."""
+    min_object_share: float = 0.01
+    """Clusters holding less than this share of the remaining Gaussians are
+    fragments, not objects."""
 
 
 # --------------------------------------------------------------------------- #
@@ -211,6 +196,10 @@ class GroupingConfig:
 @dataclass
 class TrackingConfig:
     use_depth: bool = True
+    """Paper Sec. IV-D: 'The total loss is a weighted sum of the feature loss
+    and depth loss'. NOTE: the released ``step()`` defaults to
+    ``use_depth=False`` (depth only during initialisation); run the
+    "No Depth" variant to reproduce the release behaviour."""
     use_dino: bool = True
     use_rgb: bool = False
     depth_loss_mult: float = 3.7
@@ -218,10 +207,9 @@ class TrackingConfig:
     """metres; squared internally"""
     pose_lr: float = 0.004
     pose_lr_final: float = 0.0008
-    rot_lr_scaler: float = 3.0
     blur_kernel_size: int = 5
-    blur2_kernel_size: int = 45
-    clip_grad: float = 0.8
+    clip_grad: float = 0.0
+    """The release defines ``clip_grad = 0.8`` but never applies it. 0 = off."""
     use_roi: bool = True
     use_mask_loss: bool = False
     mask_loss_mult: float = 0.6
@@ -229,36 +217,38 @@ class TrackingConfig:
     roi_inflate: float = 75.0
     max_roi_resolution: int = 490
     match_resolution: int = 500
-    """Optimizer.MATCH_RESOLUTION in the official code."""
+    """``Optimizer.MATCH_RESOLUTION``: the tracking camera's short side."""
+    dino_alpha_thresh: float = 0.8
+    """Rendered DINO is zeroed where alpha < 0.8 (``pogs.py``, eval mode)."""
+    render_mask_thresh: float = 0.9
+    """``render_mask``: object mask = accumulation > 0.9."""
+    render_untracked: bool = False
+    """The release replaces the model's Gaussians with the selected objects
+    only (``keep_inds``) before tracking, so floor/table are never rendered."""
     upright_constraint: bool = False
-    """When True, projects pose updates onto the upright yaw axis (qx = qy = 0) for planar/tabletop manipulation."""
+    """Not in POGS. Projects pose updates onto yaw-only; off by default."""
 
     init_n_seeds: int = 1
-    """Yaw seeds tried by ``initialize_obj_pose``.  1 == the official code, which
-    seeds from identity only -- correct, because Sec. IV-C canonicalises each
-    object frame so its scan-time pose is identity.  Values > 1 run a greedy
-    *per-object* sweep; never a single yaw shared by every object, which scores
-    one object's gain against every other object's corruption."""
+    """The release seeds ``initialize_obj_pose`` from identity only."""
     init_niter_coarse: int = 100
-    """First pass: DINO-only, full frame (official ``initialize_obj_pose``)."""
+    """First pass: DINO-only, full frame."""
     init_niter_fine: int = 70
     """Second pass: + depth + ROI."""
     init_lr: float = 0.005
+    init_use_depth: Optional[bool] = None
+    """Depth in the fine init pass. ``None`` follows ``use_depth``. The release
+    always uses depth here (``try_opt(..., use_depth=True)``), even though its
+    per-frame ``step()`` does not."""
     track_niter: int = 25
-    """Paper Sec. VI: multiple optimisation steps per frame at ~5 Hz."""
+    """``track_main_online_demo.py``: ``n_opt_iters = 25``."""
     accumulation_thresh: float = 0.85
     depth_outlier_ratio: float = 1.3
     erode_depth_kernel: int = 5
     erode_valid_kernel: int = 9
-    depth_mask_relative_fallback: bool = True
-    """The official mask is the absolute ``accumulation > 0.85``.  On a thin or
-    under-trained splat no pixel ever reaches it, and the Sec. IV-D depth term
-    then vanishes *silently* -- which makes the paper's "No Depth" ablation
-    compare a run against itself.  With this on, an object whose absolute mask is
-    empty falls back to ``accumulation > accumulation_thresh * accumulation.max()``
-    for that render only.  Every engagement is counted in
-    ``RigidGroupOptimizer.n_depth_fallback`` and reported, so it is never quiet.
-    Set to ``False`` to reproduce the released behaviour exactly."""
+    depth_mask_relative_fallback: bool = False
+    """Not in the release. When True, an object whose ``accumulation > 0.85``
+    mask is empty falls back to a relative threshold (counted in
+    ``RigidGroupOptimizer.n_depth_fallback``)."""
 
     @property
     def n_iters(self) -> int:
@@ -268,41 +258,28 @@ class TrackingConfig:
     def n_iters(self, val: int):
         self.track_niter = val
 
-    @property
-    def init_iters(self) -> int:
-        return self.init_niter_fine
-
-    @init_iters.setter
-    def init_iters(self, val: int):
-        self.init_niter_fine = val
 
 @dataclass
 class RuntimeConfig:
     device: str = "cuda:0"
-    feature_device: str = "cuda:1"
-    """Second T4. DINOv2 / CLIP run here so they overlap with the pose
-    optimisation on cuda:0 (paper Sec. VI lists this as future work)."""
-    use_second_gpu: bool = True
     raster_backend: Literal["auto", "gsplat", "torch"] = "auto"
     torch_raster_tile: int = 16
     torch_raster_max_per_tile: int = 1024
     torch_raster_tile_chunk: int = 128
     dino_max_size: int = 1260
-    """Long side the image is resampled to before DINOv2. The official code
-    uses MAX_DINO_SIZE = 1260. The kaggle preset halves this to 644."""
-    amp: bool = False
-    output_dir: str = "/kaggle/working/pogs_out"
+    """``MAX_DINO_SIZE``: long side the image is resampled to before DINOv2."""
+    output_dir: str = "outputs"
 
 
 @dataclass
 class EncoderConfig:
     dino_model: str = "dinov2_vits14"
     clip_model: str = "ViT-B-16"
+    clip_pretrained: str = "laion2b_s34b_b88k"
 
 
 @dataclass
 class POGSConfig:
-    capture: CaptureConfig = field(default_factory=CaptureConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     grouping: GroupingConfig = field(default_factory=GroupingConfig)
@@ -319,37 +296,24 @@ class POGSConfig:
     def training(self) -> TrainConfig:
         return self.train
 
-    @training.setter
-    def training(self, val: TrainConfig):
-        self.train = val
+    def to_dict(self) -> dict:
+        return asdict(self)
 
     def scale_for_smoke_test(self) -> "POGSConfig":
-        """Tiny settings so the whole pipeline can be exercised in ~2 minutes."""
-        self.capture.num_views = 8
-        self.capture.image_height = 120
-        self.capture.image_width = 160
-        self.capture.max_seed_points = 4000
+        """Tiny settings so the whole pipeline can be exercised quickly."""
         self.train.max_num_iterations = 60
         self.train.lerf_step = 20
         self.train.dino_step = 2
         self.train.dino_nn_delay = 20
-        self.train.render_height = 120
-        self.train.render_width = 160
         self.train.num_clip_scales = 3
         self.train.num_random_masks = 4
         self.model.warmup_length = 20
         self.model.refine_every = 20
-        self.model.stop_split_at = 40
-        self.model.max_gaussians = 20_000
         self.model.log2_hashmap_size = 16
         self.grouping.min_samples = 5
         self.grouping.min_cluster_size = 20
-        self.grouping.voxel_size = 0.004
         self.tracking.init_niter_coarse = 4
         self.tracking.init_niter_fine = 3
         self.tracking.track_niter = 3
-        self.tracking.match_resolution = 120
-        self.tracking.max_roi_resolution = 84
-        self.runtime.use_second_gpu = False
         self.runtime.dino_max_size = 210
         return self

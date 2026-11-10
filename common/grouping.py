@@ -90,7 +90,16 @@ def _hdbscan(features: np.ndarray, cfg: GroupingConfig) -> np.ndarray:
 def cluster_scene(
     model: POGSModel, cfg: GroupingConfig, verbose: bool = True
 ) -> torch.Tensor:
-    """HDBSCAN over the distilled grouping features. Returns per-Gaussian labels."""
+    """HDBSCAN over the distilled grouping features (``POGSModel.cluster``).
+    Returns per-Gaussian labels (noise re-assigned to the nearest cluster).
+
+    The release runs cuML's GPU HDBSCAN on (practically) every Gaussian. On CPU
+    (sklearn) that is intractable for 10^5 points in 128-D, so when there are
+    more than ``cfg.max_cluster_points`` we cluster a random subsample, scale
+    ``min_cluster_size`` / ``min_samples`` by the same ratio, and give every
+    other Gaussian the label of its spatially nearest clustered neighbour --
+    the same assignment the release uses for voxel-dropped points.
+    """
     from sklearn.neighbors import NearestNeighbors
 
     t0 = time.time()
@@ -98,21 +107,29 @@ def cluster_scene(
     group_feats = model.gaussian_field.instance_from_hash(hash_enc).float().cpu().numpy()
     positions = model.gauss_params["means"].data.detach().cpu().numpy()
 
-    id_vec, positions_ds = voxel_downsample_trace(positions, cfg.voxel_size)
+    id_vec, _ = voxel_downsample_trace(positions, cfg.voxel_size)
+    ratio = 1.0
+    if len(id_vec) > cfg.max_cluster_points:
+        rng = np.random.default_rng(0)
+        ratio = cfg.max_cluster_points / len(id_vec)
+        id_vec = np.sort(rng.choice(id_vec, cfg.max_cluster_points, replace=False))
+    run_cfg = GroupingConfig(**{**cfg.__dict__})
+    run_cfg.min_cluster_size = max(10, int(round(cfg.min_cluster_size * ratio)))
+    run_cfg.min_samples = max(5, int(round(cfg.min_samples * ratio)))
     if verbose:
-        print(f"  clustering {len(id_vec)} / {len(positions)} gaussians ...", end=" ", flush=True)
-    labels_ds = _hdbscan(group_feats[id_vec], cfg)
+        print(f"  clustering {len(id_vec)} / {len(positions)} gaussians "
+              f"(min_cluster_size={run_cfg.min_cluster_size}, min_samples={run_cfg.min_samples}) ...",
+              end=" ", flush=True)
+    labels_ds = _hdbscan(group_feats[id_vec], run_cfg)
 
     labels = -np.ones(positions.shape[0], dtype=np.int64)
     labels[id_vec] = labels_ds
-
-    # assign the gaussians dropped by the voxel filter to their nearest kept one
-    non_clustered = np.ones(positions.shape[0], dtype=bool)
-    non_clustered[id_vec] = False
-    if non_clustered.sum() > 0 and len(positions_ds) > 0:
-        nn_model = NearestNeighbors(n_neighbors=1).fit(positions_ds)
-        _, ind = nn_model.kneighbors(positions[non_clustered])
-        labels[non_clustered] = labels_ds[ind[:, 0]]
+    rest = np.ones(positions.shape[0], dtype=bool)
+    rest[id_vec] = False
+    if rest.any():
+        nn_model = NearestNeighbors(n_neighbors=1).fit(positions[id_vec])
+        _, ind = nn_model.kneighbors(positions[rest])
+        labels[rest] = labels_ds[ind[:, 0]]
 
     # relabel HDBSCAN noise to the spatially nearest clustered gaussian
     noise = labels == -1
@@ -183,13 +200,14 @@ def build_object_groups(
     min_gaussians: int = 50,
     names: Optional[Dict[int, str]] = None,
 ) -> ObjectGroups:
+    """Selected clusters -> tracked rigid groups (in ``keep_clusters`` order)."""
     """Selects which clusters become tracked objects and canonicalises each
     object frame at its centroid with identity rotation (Sec. IV-C)."""
     means = model.gauss_params["means"].data
     device = means.device
     uniq = [int(c) for c in torch.unique(labels).tolist() if c >= 0]
     if keep_clusters is not None:
-        uniq = [c for c in uniq if c in set(keep_clusters)]
+        uniq = [int(c) for c in keep_clusters if int(c) in set(uniq)]
     uniq = [c for c in uniq if int((labels == c).sum()) >= min_gaussians]
 
     masks, p2w = [], []
@@ -211,6 +229,24 @@ def build_object_groups(
         init_p2w=torch.stack(p2w) if p2w else torch.zeros(0, 7, device=device),
         cluster_ids=uniq,
         names=[(names or {}).get(c, f"cluster_{c}") for c in uniq],
+    )
+
+
+def subset_groups(groups: ObjectGroups, keep: Sequence[int]) -> ObjectGroups:
+    """The tracked objects restricted to groups ``keep`` (in that order), e.g.
+    the object(s) the operator clicked on (Sec. IV-C)."""
+    masks = [groups.group_masks[g] for g in keep]
+    N = masks[0].shape[0]
+    group_labels = torch.full((N,), -1, dtype=torch.long, device=masks[0].device)
+    labels_full = torch.full_like(group_labels, -1)
+    for gi, g in enumerate(keep):
+        group_labels[masks[gi]] = gi
+        labels_full[masks[gi]] = groups.cluster_ids[g]
+    return ObjectGroups(
+        labels_full=labels_full, group_labels=group_labels, group_masks=masks,
+        init_p2w=groups.init_p2w[list(keep)].clone(),
+        cluster_ids=[groups.cluster_ids[g] for g in keep],
+        names=[groups.names[g] for g in keep],
     )
 
 
@@ -281,7 +317,7 @@ def localize_query(
 
 
 def cluster_purity(labels: torch.Tensor, gt_ids: torch.Tensor) -> Dict[str, float]:
-    """Cluster-vs-ground-truth agreement for the sim scenes."""
+    """EVALUATION ONLY: cluster-vs-ground-truth agreement for the sim scenes."""
     l = labels.cpu().numpy()
     g = gt_ids.cpu().numpy()
     valid = l >= 0
@@ -302,7 +338,7 @@ def cluster_purity(labels: torch.Tensor, gt_ids: torch.Tensor) -> Dict[str, floa
 def match_clusters_to_gt(
     groups: ObjectGroups, gt_ids: torch.Tensor
 ) -> Dict[int, int]:
-    """group index -> majority ground-truth object id (for evaluation only)."""
+    """EVALUATION ONLY: group index -> majority ground-truth object id."""
     g = gt_ids.cpu().numpy()
     out = {}
     for gi, m in enumerate(groups.group_masks):
@@ -312,69 +348,67 @@ def match_clusters_to_gt(
     return out
 
 
+def group_gt_iou(groups: ObjectGroups, gt_ids: torch.Tensor, group_to_gt: Dict[int, int]) -> Dict[int, float]:
+    """EVALUATION ONLY: IoU between each tracked group and its matched GT object
+    (over Gaussians)."""
+    out = {}
+    for gi, m in enumerate(groups.group_masks):
+        g = gt_ids == group_to_gt.get(gi, -999)
+        inter = int((m & g).sum())
+        union = int((m | g).sum())
+        out[gi] = inter / max(union, 1)
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Choosing which clusters become tracked objects
 # --------------------------------------------------------------------------- #
 
 
 @torch.no_grad()
-def assign_gt_ids(model: POGSModel, capture) -> torch.Tensor:
-    """Ground-truth object id per *current* gaussian.
-
-    Densification changes the gaussian count, so the seed-point labels cannot be
-    indexed directly; each gaussian inherits the label of its nearest seed
-    point. Evaluation-only.
-    """
+def assign_gt_ids(model: POGSModel, seed_points: torch.Tensor, seed_obj_ids: torch.Tensor) -> torch.Tensor:
+    """EVALUATION ONLY: ground-truth object id per current Gaussian, inherited
+    from the nearest seed point (densification changes the Gaussian count)."""
     from sklearn.neighbors import NearestNeighbors
 
     means = model.gauss_params["means"].data.detach().cpu().numpy()
-    seeds = capture.seed_points.cpu().numpy()
-    nn = NearestNeighbors(n_neighbors=1).fit(seeds)
-    _, idx = nn.kneighbors(means)
-    return capture.seed_obj_ids[idx[:, 0]].to(model.gauss_params["means"].device)
+    nn_ = NearestNeighbors(n_neighbors=1).fit(seed_points.cpu().numpy())
+    _, idx = nn_.kneighbors(means)
+    return seed_obj_ids.cpu()[idx[:, 0]].to(model.gauss_params["means"].device)
 
 
 @torch.no_grad()
 def select_object_clusters(
     model: POGSModel,
     labels: torch.Tensor,
-    method: str = "geometry",
+    cfg: GroupingConfig,
     clip: Optional[OpenCLIPNetwork] = None,
     queries: Optional[Sequence[str]] = None,
-    gt_ids: Optional[torch.Tensor] = None,
-    max_footprint_m2: float = 0.16,
-    max_share: float = 0.40,
+    min_gaussians: int = 50,
     verbose: bool = True,
-) -> List[int]:
-    """Stands in for the paper's interactive "Click -> Crop to Click -> Add Crop
-    to Group List" workflow.
+) -> Tuple[List[int], torch.Tensor]:
+    """Stands in for the release's interactive "click -> crop to click -> add
+    crop to group list" step. Returns ``(cluster ids, filtered labels)``.
 
-    ``geometry``  drop clusters that behave like the tabletop (huge XY footprint,
-                  or an implausibly large share of the scene).
-    ``language``  one cluster per natural-language query, via CLIP relevancy --
-                  this is the paper's actual mechanism (Sec. IV-E) and needs
-                  real OpenCLIP weights.
-    ``gt``        majority ground-truth id; diagnostics only.
+    Like the release, Gaussians below the support plane (``table_z + 0.015`` in
+    ``pogs_pipeline.py``; here ``cfg.support_z`` above the floor) are removed
+    from every cluster first.
+
+    ``geometry``  keep clusters that are not the support surface: small XY
+                  footprint and a modest share of the scene.
+    ``language``  one cluster per natural-language query via CLIP relevancy
+                  (Sec. IV-E) -- needs real OpenCLIP weights.
     """
     means = model.gauss_params["means"].data
-    total = means.shape[0]
+    labels = labels.clone()
+    labels[means[:, 2] < cfg.support_z] = -1
+    total = int((labels >= 0).sum())
     ids = [int(c) for c in torch.unique(labels).tolist() if c >= 0]
 
-    if method == "gt":
-        assert gt_ids is not None
-        keep = []
-        for c in ids:
-            m = labels == c
-            sel = gt_ids[m]
-            sel = sel[sel > 0]                    # object id 0 is the table
-            if sel.numel() > 0.5 * int(m.sum()):
-                keep.append(c)
-        return keep
-
-    if method == "language":
+    if cfg.select_method == "language":
         assert clip is not None and queries, "language selection needs CLIP + queries"
-        groups_all = build_object_groups(model, labels)
-        keep = []
+        groups_all = build_object_groups(model, labels, min_gaussians=min_gaussians)
+        keep: List[int] = []
         for q in queries:
             gi, per_group, _ = localize_query(model, clip, groups_all, q)
             cid = groups_all.cluster_ids[gi]
@@ -382,19 +416,36 @@ def select_object_clusters(
                 print(f"  query '{q}' -> cluster {cid} (relevancy {per_group[gi]:.3f})")
             if cid not in keep:
                 keep.append(cid)
-        return keep
+        return keep, labels
+
+    # The negative-mask term of the contrastive loss pulls every background
+    # Gaussian's grouping feature towards the all-ones unit vector (Sec. IV-B:
+    # "including a negative mask ... reduces group feature noise for the scene
+    # background"), so a cluster whose features sit there IS background.
+    feats = model.gaussian_field.instance_from_hash(model.smoothed_hash(cfg.knn_k)).float()
+    ones = torch.ones(feats.shape[1], device=feats.device) / feats.shape[1] ** 0.5
+    bg_sim = feats @ ones
 
     keep = []
+    min_n = max(min_gaussians, int(cfg.min_object_share * total))
     for c in ids:
         m = labels == c
         n = int(m.sum())
         p = means[m]
         footprint = float((p[:, 0].max() - p[:, 0].min()) * (p[:, 1].max() - p[:, 1].min()))
-        share = n / total
-        is_table = footprint > max_footprint_m2 or share > max_share
+        share = n / max(total, 1)
+        sim = float(bg_sim[m].mean())
+        if n < min_n:
+            verdict = "too small"
+        elif sim > cfg.background_sim_thresh:
+            verdict = "background (negative-mask feature)"
+        elif footprint > cfg.max_footprint_m2 or share > cfg.max_share:
+            verdict = "support surface"
+        else:
+            verdict = "object"
         if verbose:
-            print(f"  cluster {c}: {n} gaussians, footprint {footprint:.3f} m^2, "
-                  f"share {share:.2f} -> {'BACKGROUND' if is_table else 'tracked'}")
-        if not is_table:
+            print(f"  cluster {c}: {n} gaussians, footprint {footprint:.3f} m^2, share {share:.2f}, "
+                  f"bg-sim {sim:+.2f} -> {verdict}")
+        if verdict == "object":
             keep.append(c)
-    return keep
+    return keep, labels

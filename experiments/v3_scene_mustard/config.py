@@ -1,46 +1,27 @@
 """
-Configuration for Scene 2 (Yellow Mustard Bottle Pick-and-Place).
+v3 configuration: other target objects. Same scene, checkpoint and grouping as
+v1/v2; v3 reports the benchmark's ``object`` (mug / mustard bottle / cereal box)
+and ``multi-object`` factors for base POGS and the best v2 variant. Runs come
+from the shared cache, so anything v1/v2 already tracked is not repeated.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
+from experiments.pipeline import MethodSpec
+from experiments.v1_base_pogs.config import get_v1_config
+from experiments.v2_kalman_pogs.config import _kf
 
-from common.config import POGSConfig
-from experiments.v2_kalman_pogs.config import KalmanConfig
+RESULTS_DIR = "data_results/v3_objects"
+FACTORS_V3 = ("object", "multi-object")
 
 
-def get_mustard_config(
-    preset: Literal["base", "kalman"] = "kalman",
-    device: str = "cuda:0",
-) -> tuple[POGSConfig, KalmanConfig]:
-    """Returns (POGSConfig, KalmanConfig) tuned for Scene 2 Mustard Bottle tracking."""
-    cfg = POGSConfig(device=device)
+def get_v3_config(device: str = "cuda:0"):
+    return get_v1_config(device)
 
-    cfg.runtime.torch_raster_max_per_tile = 512
-    cfg.tracking.use_roi = False
-    cfg.tracking.upright_constraint = True
-    cfg.tracking.clip_grad = 0.5
-    cfg.tracking.pose_lr = 0.012
-    cfg.tracking.pose_lr_final = 0.002
-    cfg.tracking.depth_loss_mult = 150.0
-    cfg.tracking.depth_ignore_threshold = 0.08
-    cfg.tracking.track_niter = 25
-    cfg.tracking.use_depth = True
-    cfg.tracking.use_dino = True
-    cfg.runtime.output_dir = f"data_results/v3_mustard_pogs/{preset}"
 
-    k_cfg = KalmanConfig(
-        enabled=(preset == "kalman"),
-        warm_start_optimizer=True,
-        fuse_measurement=True,
-        process_noise_pos=1e-4,
-        process_noise_vel=1e-3,
-        process_noise_yaw=1e-3,
-        process_noise_omega=1e-2,
-        measure_noise_pos=5e-4,
-        measure_noise_yaw=5e-3,
-    )
-
-    return cfg, k_cfg
+def v3_methods():
+    return [
+        MethodSpec("POGS", "POGS"),
+        MethodSpec("POGS (release: no per-frame depth)", "POGS (release: no per-frame depth)"),
+        MethodSpec("POGS + KF", "POGS", _kf()),
+    ]

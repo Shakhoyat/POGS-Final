@@ -35,15 +35,37 @@ _GSPLAT = None
 _GSPLAT_CHECKED = False
 
 
+def _ensure_cuda_env() -> None:
+    """Point torch's JIT builder at the pip-installed CUDA toolkit in .venv
+    (see ``tools/setup_gsplat.sh``) when the caller did not set one up."""
+    import os
+    import sys
+
+    if os.environ.get("CUDA_HOME"):
+        return
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sp = os.path.join(root, ".venv", "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
+    cuda = os.path.join(sp, "nvidia", "cu13")
+    if not os.path.exists(os.path.join(cuda, "bin", "nvcc")):
+        return
+    os.environ["CUDA_HOME"] = cuda
+    os.environ["PATH"] = os.pathsep.join([os.path.join(root, ".venv", "bin"), os.path.join(cuda, "bin"), os.environ.get("PATH", "")])
+    inc = os.path.join(root, ".venv", "sysinclude", "usr", "include")
+    pyinc = os.path.join(inc, f"python{sys.version_info.major}.{sys.version_info.minor}")
+    os.environ["CPATH"] = os.pathsep.join(p for p in [pyinc, inc, os.environ.get("CPATH", "")] if p)
+    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.9")
+
+
 def gsplat_available() -> bool:
     global _GSPLAT, _GSPLAT_CHECKED
     if not _GSPLAT_CHECKED:
         _GSPLAT_CHECKED = True
         try:  # pragma: no cover - depends on the runtime image
+            _ensure_cuda_env()
             from gsplat.rendering import rasterization  # noqa: F401
-            import gsplat.cuda._wrapper as _gw
-            if getattr(_gw, "_C", None) is None:
-                raise RuntimeError("gsplat CUDA extension not compiled")
+            from gsplat.cuda._backend import _C  # triggers / loads the JIT build
+            if _C is None:
+                raise RuntimeError("gsplat CUDA extension could not be built or loaded")
             _GSPLAT = rasterization
         except Exception as exc:  # noqa: BLE001
             print(f"[raster] gsplat unavailable ({type(exc).__name__}: {exc}); "
@@ -81,9 +103,10 @@ def rasterize(
     tile_size: int = 16,
     max_per_tile: int = 192,
     tile_chunk: int = 128,
-    antialiased: bool = True,
+    antialiased: bool = False,
     near_plane: float = 0.01,
     far_plane: float = 1e10,
+    absgrad: bool = False,
 ) -> Dict[str, torch.Tensor]:
     """Returns ``{'render': (H,W,D), 'alpha': (H,W,1), 'depth': (H,W,1)|None,
     'means2d': (N,2), 'radii': (N,), 'visible': (N,) bool}``."""
@@ -92,6 +115,7 @@ def rasterize(
         return _rasterize_gsplat(
             means, quats, scales, opacities, colors, camera, sh_degree,
             render_depth, background, tile_size, antialiased, near_plane, far_plane,
+            absgrad,
         )
     return _rasterize_torch(
         means, quats, scales, opacities, colors, camera, sh_degree,
@@ -120,6 +144,7 @@ def rasterize_gaussians(means, scales, quats, opacities, colors, camera, **kwarg
 def _rasterize_gsplat(
     means, quats, scales, opacities, colors, camera, sh_degree,
     render_depth, background, tile_size, antialiased, near_plane, far_plane,
+    absgrad=False,
 ):
     rasterization = _GSPLAT
     viewmat = camera.w2c.unsqueeze(0)
@@ -143,7 +168,7 @@ def _rasterize_gsplat(
         render_mode=mode,
         sh_degree=sh_degree,
         sparse_grad=False,
-        absgrad=True,
+        absgrad=absgrad,
         rasterize_mode="antialiased" if antialiased else "classic",
     )
     alpha = alpha.squeeze(0)                       # (H, W, 1)
@@ -171,7 +196,7 @@ def _rasterize_gsplat(
         "means2d": means2d,
         "radii": radii,
         "visible": (radii > 0) if radii is not None else None,
-        "info": info,
+        "info": info,          # raw gsplat info, consumed by gsplat's DefaultStrategy
     }
 
 

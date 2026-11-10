@@ -198,12 +198,13 @@ def apply_group_deltas(
 
     new_g2w = p2w @ delta @ p2w^-1 @ g2w
     """
-    p2w = init_p2w_7vec[group_labels]          # (N, 7)
-    delta = part_deltas[group_labels]          # (N, 7)
+    # Compose the K per-group transforms first, then gather them: identical
+    # maths, but the gather's backward is a K-row scatter-add (index_select)
+    # instead of advanced-indexing's slow accumulate over N rows.
+    T = se3_compose(se3_compose(init_p2w_7vec, part_deltas), se3_inverse(init_p2w_7vec))   # (K, 7)
+    T_n = torch.index_select(T, 0, group_labels)                                            # (N, 7)
     g2w = torch.cat([means, quat_normalize(quats)], dim=-1)
-
-    g2p = se3_compose(se3_inverse(p2w), g2w)
-    new_g2w = se3_compose(se3_compose(p2w, delta), g2p)
+    new_g2w = se3_compose(T_n, g2w)
     return new_g2w[:, :3], new_g2w[:, 3:]
 
 
@@ -295,6 +296,14 @@ class PinholeCamera:
             max(1, int(round(self.height * factor))),
         )
 
+    def rescale_to(self, height: int, width: int) -> "PinholeCamera":
+        """Resample to an exact output size (independent x / y factors)."""
+        sx, sy = width / self.width, height / self.height
+        return PinholeCamera(
+            self.c2w.clone(), self.fx * sx, self.fy * sy, self.cx * sx, self.cy * sy,
+            int(width), int(height),
+        )
+
     def crop(self, xmin: int, xmax: int, ymin: int, ymax: int) -> "PinholeCamera":
         """Port of ``pogs/tracking/utils.py::crop_camera``."""
         return PinholeCamera(
@@ -338,6 +347,8 @@ def look_at(eye: np.ndarray, target: np.ndarray, up=(0.0, 0.0, 1.0)) -> np.ndarr
 
 def geodesic_rotation_error(R_a: np.ndarray, R_b: np.ndarray) -> float:
     """Angle in degrees between two rotation matrices."""
-    R = R_a.T @ R_b
+    R = np.asarray(R_a, dtype=np.float64).T @ np.asarray(R_b, dtype=np.float64)
     cos = (np.trace(R) - 1.0) / 2.0
-    return float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
+    sin = 0.5 * np.linalg.norm([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+    # atan2 is accurate near 0 and 180 deg, where arccos loses ~1e-2 deg
+    return float(np.degrees(np.arctan2(sin, cos)))

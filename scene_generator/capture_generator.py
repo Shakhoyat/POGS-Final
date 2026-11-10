@@ -68,8 +68,13 @@ def hemisphere_trajectory(
     return cams
 
 
-def dbscan_filter(points: np.ndarray, colors: np.ndarray, eps: float = 0.015, min_samples: int = 8, return_mask: bool = False):
-    """Applies spatial DBSCAN clustering to discard sensor noise outliers."""
+def dbscan_filter(
+    points: np.ndarray, colors: np.ndarray, eps: float = 0.015, min_samples: int = 8,
+    return_mask: bool = False, min_cluster_points: int = 30,
+):
+    """Sec. IV-A: 'We run DBSCAN on the fused pointcloud to filter noise and
+    floater points.' Drops DBSCAN noise and tiny floater clusters; every real
+    surface (floor, table, every object) is kept."""
     from sklearn.cluster import DBSCAN
     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(points)
     labels = clustering.labels_
@@ -78,10 +83,9 @@ def dbscan_filter(points: np.ndarray, colors: np.ndarray, eps: float = 0.015, mi
         if return_mask:
             return points, colors, np.ones(len(points), dtype=bool)
         return points, colors
-    # Keep top clusters (table + main objects)
     u_labels, counts = np.unique(labels[valid], return_counts=True)
-    top_labels = set(u_labels[np.argsort(-counts)[:6]])
-    keep = np.isin(labels, list(top_labels))
+    kept_labels = u_labels[counts >= min_cluster_points]
+    keep = np.isin(labels, kept_labels)
     if return_mask:
         return points[keep], colors[keep], keep
     return points[keep], colors[keep]

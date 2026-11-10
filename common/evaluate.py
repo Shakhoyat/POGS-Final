@@ -1,34 +1,45 @@
 """
-Offline tracking driver, metrics, and the paper's benchmark protocols.
+Offline tracking driver and metrics -- the ONE tracking loop shared by every
+experiment (v1 base POGS, v2 Kalman, v3 other scene).
 
-Metrics follow Table I of the paper:
-    * mean / std translation error (cm)
-    * max and mean *consecutive successful object resets* before tracking is lost
-plus the standard 6D-pose measures (ADD, ADD-S, rotation error) that the
-simulator's ground truth makes available.
+Protocol (mirrors ``track_main_online_demo.py``):
+    1. ``initialize_obj_pose`` on frame 0 (100 DINO-only full-frame steps, then
+       70 steps with depth + ROI);
+    2. for every frame (including frame 0): build the observation, compute each
+       object's ROI from the current pose, run ``track_niter`` optimiser steps.
 
-Ablations mirror the paper's two columns:
-    "No Depth"  -> depth loss off during tracking
-    "No DINO"   -> RGB loss substituted for the DINO feature loss
+An optional *motion prior* (v2's Kalman filter) can warm-start the optimiser
+from a predicted pose and/or replace the output with a fused estimate. With
+``motion_prior=None`` the loop is exactly base POGS.
+
+Metrics, per frame and tracked object, against simulator ground truth:
+    trans_err_cm   centroid position error
+    rot_err_deg    geodesic rotation error
+    yaw_err_deg    error about the world vertical axis
+    add / adds     ADD / ADD-S over the object's scan-time Gaussians (metres)
+    success        the paper's tool-servoing criterion: < 3 cm AND < 5 deg
 """
 
 from __future__ import annotations
 
+import copy
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Protocol, Sequence
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from .config import POGSConfig, TrackingConfig
-from .geometry import PinholeCamera, geodesic_rotation_error
+from .geometry import geodesic_rotation_error, identity_posevec
 from .grouping import ObjectGroups
 from .model import POGSModel
-from .simscene import TrackingSequence, sample_object_model_points
-from .tracking import DinoFn, DinoPrefetcher, PosedObservation, RigidGroupOptimizer
+from .tracking import DinoFn, PosedObservation, RigidGroupOptimizer
+
+SUCCESS_POS_CM = 3.0
+SUCCESS_ROT_DEG = 5.0
+"""Sec. V-B: 'locate the drill tip within 3cm and 5 deg of the target'."""
 
 
 # --------------------------------------------------------------------------- #
@@ -44,38 +55,67 @@ def rotation_error_deg(T_pred: np.ndarray, T_gt: np.ndarray) -> float:
     return geodesic_rotation_error(T_pred[:3, :3], T_gt[:3, :3])
 
 
+def yaw_deg(R: np.ndarray) -> float:
+    return math.degrees(math.atan2(R[1, 0], R[0, 0]))
+
+
+def yaw_error_deg(T_pred: np.ndarray, T_gt: np.ndarray) -> float:
+    d = yaw_deg(T_pred[:3, :3]) - yaw_deg(T_gt[:3, :3])
+    return abs((d + 180.0) % 360.0 - 180.0)
+
+
 def add_metric(points: np.ndarray, T_pred: np.ndarray, T_gt: np.ndarray) -> float:
-    """Average Distance of Model Points (Hinterstoisser et al.), in metres."""
+    """Average Distance of model points (Hinterstoisser et al.), metres.
+    ``points`` are object-local (relative to the scan-time centroid)."""
     a = points @ T_pred[:3, :3].T + T_pred[:3, 3]
     b = points @ T_gt[:3, :3].T + T_gt[:3, 3]
     return float(np.linalg.norm(a - b, axis=1).mean())
 
 
-def adds_metric(
-    points: np.ndarray, T_pred: np.ndarray, T_gt: np.ndarray,
-    max_pts: int = 1500, chunk: int = 256,
-) -> float:
-    """ADD-S: symmetry-aware nearest-neighbour variant.
-
-    Computed in row chunks rather than as one ``(N, N, 3)`` difference tensor --
-    at the default ``max_pts`` that array alone is 51 MB of float64, which is
-    enough to fail on a memory-constrained host.
-    """
+def adds_metric(points: np.ndarray, T_pred: np.ndarray, T_gt: np.ndarray, max_pts: int = 1500, chunk: int = 256) -> float:
+    """ADD-S: symmetry-aware nearest-neighbour variant (chunked, float64)."""
     if len(points) > max_pts:
         idx = np.random.default_rng(0).choice(len(points), max_pts, replace=False)
         points = points[idx]
-    # float64: the |a|^2 - 2a.b + |b|^2 expansion cancels badly in float32, which
-    # shows up as a non-zero ADD-S for an exact pose match
     a = (points @ T_pred[:3, :3].T + T_pred[:3, 3]).astype(np.float64)
     b = (points @ T_gt[:3, :3].T + T_gt[:3, 3]).astype(np.float64)
     b2 = (b * b).sum(axis=1)
     total = 0.0
     for i in range(0, len(a), chunk):
         block = a[i : i + chunk]
-        # |a - b|^2 = |a|^2 - 2 a.b + |b|^2, so no (n, m, 3) intermediate
         d2 = (block * block).sum(axis=1)[:, None] - 2.0 * (block @ b.T) + b2[None, :]
         total += float(np.sqrt(np.maximum(d2.min(axis=1), 0.0)).sum())
     return total / max(len(a), 1)
+
+
+def object_diameter(points: np.ndarray) -> float:
+    """Robust object diameter (m): diagonal of the 1-99 percentile box of the
+    model points, so a few floater Gaussians do not inflate it."""
+    lo, hi = np.percentile(points, 1, axis=0), np.percentile(points, 99, axis=0)
+    return float(np.linalg.norm(hi - lo))
+
+
+ADDS_SUCCESS_FRAC = 0.10
+"""Standard ADD(-S) criterion: ADD-S below 10% of the object diameter
+(Hinterstoisser et al. 2012; PoseCNN). Symmetry-aware, unlike 3 cm / 5 deg."""
+
+
+def adds_success_rate(adds_m: np.ndarray, diameter_m: float) -> float:
+    v = adds_m[~np.isnan(adds_m)]
+    return float((v < ADDS_SUCCESS_FRAC * diameter_m).mean()) if v.size else float("nan")
+
+
+def gt_pose_for_group(seq, frame_idx: int, gt_obj_id: int, base_centroid: np.ndarray) -> np.ndarray:
+    """GT pose in POGS's convention: [R_delta | centroid after the motion].
+
+    ``gt_delta`` is the world-frame rigid motion applied to the object's
+    geometry (x' = R x + t), so the scan-time centroid ``c`` moves to
+    ``R c + t``; POGS predicts ``c + delta_t`` for the same point."""
+    T = seq.frames[frame_idx].gt_delta.get(gt_obj_id, np.eye(4))
+    out = np.eye(4)
+    out[:3, :3] = T[:3, :3]
+    out[:3, 3] = T[:3, :3] @ base_centroid + T[:3, 3]
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -88,80 +128,99 @@ class TrackingResult:
     name: str
     trans_err_cm: np.ndarray          # (F, K)
     rot_err_deg: np.ndarray           # (F, K)
-    add: np.ndarray                   # (F, K)
-    adds: np.ndarray                  # (F, K)
-    frame_times: np.ndarray           # (F,)
-    iters: np.ndarray                 # (F,)
+    yaw_err_deg: np.ndarray           # (F, K)
+    add: np.ndarray                   # (F, K) metres
+    adds: np.ndarray                  # (F, K) metres
+    frame_times: np.ndarray           # (F,) seconds
+    dino_ms: np.ndarray               # (F,)
+    opt_ms: np.ndarray                # (F,)
     losses: np.ndarray                # (F,)
-    reset_frames: List[int]
-    hand_frames: List[int]
     pred_poses: np.ndarray            # (F, K, 4, 4)
     gt_poses: np.ndarray              # (F, K, 4, 4)
-    renders: List[np.ndarray] = field(default_factory=list)
+    part_deltas: np.ndarray           # (F, K, 7)
+    occluded: np.ndarray              # (F,) bool -- GT occluder in view
+    group_names: List[str] = field(default_factory=list)
     init_time: float = 0.0
-    depth_diag: Dict[str, float] = field(default_factory=dict)
-    """From ``RigidGroupOptimizer.depth_diagnostics()`` -- how much of the depth
-    term actually reached the loss. A ``depth_drop_rate`` near 1.0 invalidates
-    any comparison against the "No Depth" ablation."""
+    diagnostics: Dict[str, float] = field(default_factory=dict)
 
-    # -- headline numbers -------------------------------------------------- #
+    def _sel(self, arr: np.ndarray, group: Optional[int]) -> np.ndarray:
+        return arr if group is None else arr[:, group : group + 1]
 
-    def mean_position_error_cm(self) -> float:
-        return float(np.nanmean(self.trans_err_cm))
+    def success(self, group: Optional[int] = None) -> np.ndarray:
+        t, r = self._sel(self.trans_err_cm, group), self._sel(self.rot_err_deg, group)
+        return (t < SUCCESS_POS_CM) & (r < SUCCESS_ROT_DEG)
 
-    def std_position_error_cm(self) -> float:
-        return float(np.nanstd(self.trans_err_cm))
-
-    def mean_rotation_error_deg(self) -> float:
-        return float(np.nanmean(self.rot_err_deg))
-
-    def fps(self) -> float:
-        return float(1.0 / max(np.nanmean(self.frame_times), 1e-9))
-
-    def tracking_lost(self, thresh_cm: float = 5.0) -> np.ndarray:
-        """Per-frame boolean: has any object's error exceeded the threshold?
-        The paper defines tracking loss as the point where "repeated grasping
-        failures occur due to irrecoverable errors in object state estimation"."""
-        return (self.trans_err_cm > thresh_cm).any(axis=1)
-
-    def consecutive_resets(self, thresh_cm: float = 5.0) -> Tuple[int, float]:
-        """(max, mean) consecutive successful object resets before tracking is
-        lost -- the "Max/Mean Consecutive OR" rows of Table I."""
-        lost = self.tracking_lost(thresh_cm)
-        runs, cur = [], 0
-        for f in self.reset_frames:
-            if f < len(lost) and not lost[max(f - 1, 0) : f + 2].any():
-                cur += 1
-            else:
-                runs.append(cur)
-                cur = 0
-        runs.append(cur)
-        return (max(runs) if runs else 0, float(np.mean(runs)) if runs else 0.0)
-
-    def summary(self, thresh_cm: float = 5.0) -> Dict[str, float]:
-        mx, mean = self.consecutive_resets(thresh_cm)
-        occl = np.zeros(len(self.frame_times), dtype=bool)
-        occl[self.hand_frames] = True
-        return {
+    def summary(self, group: Optional[int] = None) -> Dict[str, float]:
+        t = self._sel(self.trans_err_cm, group)
+        r = self._sel(self.rot_err_deg, group)
+        y = self._sel(self.yaw_err_deg, group)
+        a = self._sel(self.add, group)
+        s = self._sel(self.adds, group)
+        occ = self.occluded
+        out = {
             "name": self.name,
-            "mean_pos_err_cm": self.mean_position_error_cm(),
-            "std_pos_err_cm": self.std_position_error_cm(),
-            "mean_rot_err_deg": self.mean_rotation_error_deg(),
-            "mean_add_cm": float(np.nanmean(self.add) * 100),
-            "mean_adds_cm": float(np.nanmean(self.adds) * 100),
-            "max_consecutive_or": mx,
-            "mean_consecutive_or": mean,
-            "frac_lost": float(self.tracking_lost(thresh_cm).mean()),
-            "pos_err_occluded_cm": float(np.nanmean(self.trans_err_cm[occl])) if occl.any() else float("nan"),
-            "pos_err_clear_cm": float(np.nanmean(self.trans_err_cm[~occl])) if (~occl).any() else float("nan"),
-            "fps": self.fps(),
-            "mean_iters": float(np.mean(self.iters)),
+            "mean_pos_err_cm": float(np.nanmean(t)),
+            "median_pos_err_cm": float(np.nanmedian(t)),
+            "max_pos_err_cm": float(np.nanmax(t)),
+            "mean_rot_err_deg": float(np.nanmean(r)),
+            "max_rot_err_deg": float(np.nanmax(r)),
+            "mean_yaw_err_deg": float(np.nanmean(y)),
+            "final_pos_err_cm": float(np.nanmean(t[-1])),
+            "final_rot_err_deg": float(np.nanmean(r[-1])),
+            "mean_add_cm": float(np.nanmean(a) * 100),
+            "mean_adds_cm": float(np.nanmean(s) * 100),
+            "success_rate": float(np.nanmean(self.success(group))),
+            "pos_err_occluded_cm": float(np.nanmean(t[occ])) if occ.any() else float("nan"),
+            "pos_err_clear_cm": float(np.nanmean(t[~occ])) if (~occ).any() else float("nan"),
+            "fps": float(1.0 / max(np.nanmean(self.frame_times), 1e-9)) if self.frame_times.any() else float("nan"),
+            "mean_dino_ms": float(np.nanmean(self.dino_ms)),
+            "mean_opt_ms": float(np.nanmean(self.opt_ms)),
             "init_time_s": self.init_time,
-            "depth_drop_rate": self.depth_diag.get("depth_drop_rate", float("nan")),
         }
+        out.update({k: v for k, v in self.diagnostics.items()})
+        return out
+
+    def telemetry(self) -> List[Dict[str, object]]:
+        F, K = self.trans_err_cm.shape
+        rows = []
+        for f in range(F):
+            rows.append({
+                "frame": f,
+                "occluded": bool(self.occluded[f]),
+                "frame_ms": float(self.frame_times[f] * 1000),
+                "dino_ms": float(self.dino_ms[f]),
+                "opt_ms": float(self.opt_ms[f]),
+                "loss": float(self.losses[f]),
+                "objects": [
+                    {
+                        "group": g,
+                        "name": self.group_names[g] if g < len(self.group_names) else f"group_{g}",
+                        "trans_err_cm": float(self.trans_err_cm[f, g]),
+                        "rot_err_deg": float(self.rot_err_deg[f, g]),
+                        "yaw_err_deg": float(self.yaw_err_deg[f, g]),
+                        "add_cm": float(self.add[f, g] * 100),
+                        "pred_pose": self.pred_poses[f, g].tolist(),
+                        "gt_pose": self.gt_poses[f, g].tolist(),
+                    }
+                    for g in range(K)
+                ],
+            })
+        return rows
 
 
-TrackingMetrics = TrackingResult
+# --------------------------------------------------------------------------- #
+# Motion prior hook (v2)
+# --------------------------------------------------------------------------- #
+
+
+class MotionPrior(Protocol):
+    warm_start: bool
+    fuse: bool
+    check_loss: bool        # optional; see common.kalman.KalmanMotionPrior
+
+    def initialize(self, posevecs: torch.Tensor) -> None: ...
+    def predict(self, device=None) -> torch.Tensor: ...
+    def update(self, posevecs: torch.Tensor, device=None) -> torch.Tensor: ...
 
 
 # --------------------------------------------------------------------------- #
@@ -169,599 +228,250 @@ TrackingMetrics = TrackingResult
 # --------------------------------------------------------------------------- #
 
 
-def _gt_pose_for_group(
-    seq: TrackingSequence, frame_idx: int, gt_obj_id: int, base_centroid: np.ndarray
-) -> np.ndarray:
-    """GT object pose expressed the same way POGS expresses it: identity
-    rotation at the scan-time centroid, then the world-frame delta."""
-    T = seq.frames[frame_idx].gt_delta.get(gt_obj_id, np.eye(4))
-    out = np.eye(4)
-    out[:3, :3] = T[:3, :3]
-    # the object rotates about its own centroid, so the induced centroid motion is
-    # R * c + t, expressed relative to the scan centroid
-    out[:3, 3] = T[:3, :3] @ base_centroid + T[:3, 3]
+def _score_frame(seq, fi, P, groups, group_to_gt, base_centroids, model_points, out):
+    for gi in range(groups.num_groups):
+        gt_id = group_to_gt.get(gi, -1)
+        if gt_id < 0:
+            continue
+        T_gt = gt_pose_for_group(seq, fi, gt_id, base_centroids[gi])
+        out["preds"][fi, gi], out["gts"][fi, gi] = P[gi], T_gt
+        out["trans"][fi, gi] = translation_error_cm(P[gi], T_gt)
+        out["rot"][fi, gi] = rotation_error_deg(P[gi], T_gt)
+        out["yaw"][fi, gi] = yaw_error_deg(P[gi], T_gt)
+        pts = model_points.get(gi) if model_points else None
+        if pts is not None:
+            out["add"][fi, gi] = add_metric(pts, P[gi], T_gt)
+            out["adds"][fi, gi] = adds_metric(pts, P[gi], T_gt)
+
+
+def _alloc(F_n: int, K: int) -> Dict[str, np.ndarray]:
+    return {
+        "trans": np.full((F_n, K), np.nan), "rot": np.full((F_n, K), np.nan),
+        "yaw": np.full((F_n, K), np.nan), "add": np.full((F_n, K), np.nan),
+        "adds": np.full((F_n, K), np.nan),
+        "preds": np.tile(np.eye(4), (F_n, K, 1, 1)), "gts": np.tile(np.eye(4), (F_n, K, 1, 1)),
+    }
+
+
+def object_model_points(groups: ObjectGroups, model: POGSModel) -> Dict[int, np.ndarray]:
+    """Scan-time Gaussian means of every tracked group, relative to its centroid
+    (the 'model points' for ADD / ADD-S)."""
+    means = model.gauss_params["means"].data
+    out = {}
+    for gi, m in enumerate(groups.group_masks):
+        c = groups.init_p2w[gi, :3]
+        out[gi] = (means[m] - c).detach().cpu().numpy()
     return out
+
+
+def tracking_camera(seq_camera, tcfg: TrackingConfig, device: str):
+    """``Optimizer.MATCH_RESOLUTION``: rescale so the short side is 500 px
+    (only ever downscale)."""
+    cam = seq_camera.to(device)
+    scale = tcfg.match_resolution / min(cam.width, cam.height)
+    return cam.rescale(scale) if scale < 1.0 else cam
 
 
 def track_sequence(
     model: POGSModel,
     groups: ObjectGroups,
-    seq: TrackingSequence,
+    seq,
     dino_fn: DinoFn,
     cfg: POGSConfig,
-    group_to_gt: Optional[Dict[int, int]] = None,
+    group_to_gt: Dict[int, int],
     name: str = "POGS",
     tracking_cfg: Optional[TrackingConfig] = None,
     model_points: Optional[Dict[int, np.ndarray]] = None,
-    save_renders: bool = False,
-    render_every: int = 1,
-    prefetch_dino: bool = False,
-    verbose: bool = True,
+    motion_prior: Optional[MotionPrior] = None,
     max_frames: Optional[int] = None,
-    **kwargs,
+    verbose: bool = True,
 ) -> TrackingResult:
     """Runs POGS tracking over an RGB-D sequence and scores it against GT."""
-    if group_to_gt is None:
-        group_to_gt = kwargs.get("group2gt", {})
     tcfg = tracking_cfg or cfg.tracking
     device = cfg.runtime.device
     raster_kwargs = (
-        dict(max_per_tile=cfg.runtime.torch_raster_max_per_tile,
-             tile_chunk=cfg.runtime.torch_raster_tile_chunk)
+        dict(max_per_tile=cfg.runtime.torch_raster_max_per_tile, tile_chunk=cfg.runtime.torch_raster_tile_chunk)
         if model.backend == "torch" else {}
     )
-
     snapshot = model.state_snapshot()
     opt = RigidGroupOptimizer(tcfg, model, groups, raster_kwargs=raster_kwargs)
-
-    base_cam = seq.camera.to(device)
-    scale = tcfg.match_resolution / min(base_cam.width, base_cam.height)
-    cam = base_cam.rescale(min(scale, 1.0)) if scale < 1.0 else base_cam
+    cam = tracking_camera(seq.camera, tcfg, device)
 
     frames = seq.frames if max_frames is None else seq.frames[:max_frames]
     F_n, K = len(frames), groups.num_groups
+    base_centroids = {gi: groups.init_p2w[gi, :3].detach().cpu().numpy() for gi in range(K)}
+    acc = _alloc(F_n, K)
+    times, dino_ms, opt_ms = np.zeros(F_n), np.zeros(F_n), np.zeros(F_n)
+    n_pred_kept = 0
+    losses = np.full(F_n, np.nan)
+    deltas = np.zeros((F_n, K, 7), dtype=np.float32)
 
     def make_obs(fr):
-        return PosedObservation(
-            fr.rgb.to(device), cam, dino_fn, fr.depth.to(device), tcfg.max_roi_resolution
-        )
+        return PosedObservation(fr.rgb.to(device), cam, dino_fn, fr.depth.to(device), tcfg.max_roi_resolution)
 
-    def build_obs_with_rois(fr):
-        """Observation with every object's ROI already attached, computed from
-        the optimiser's *current* pose estimate."""
-        obs = make_obs(fr)
-        if tcfg.use_roi:
-            for i in range(K):
-                try:
-                    obs.add_roi(*opt.calculate_roi(i, obs.frame.camera))
-                except RuntimeError:
-                    obs.add_roi(0.0, 1.0, 0.0, 1.0)
-        return obs
-
-    # ---- initialisation -------------------------------------------------- #
+    # ---- initialisation on frame 0 -------------------------------------- #
     t0 = time.time()
-    obs0 = make_obs(frames[0])
-    init_info = opt.initialize_obj_pose(obs0, n_seeds=tcfg.init_n_seeds, verbose=verbose)
+    init_info = opt.initialize_obj_pose(make_obs(frames[0]), n_seeds=tcfg.init_n_seeds, verbose=False)
     init_time = time.time() - t0
     if verbose:
-        print(f"  [{name}] init: coarse={init_info['coarse_loss']:.4f} "
-              f"fine={init_info['fine_loss']:.4f} in {init_time:.1f}s")
-
-    prefetcher = DinoPrefetcher(enabled=prefetch_dino)
-
-    base_centroids = {gi: groups.init_p2w[gi, :3].detach().cpu().numpy() for gi in range(K)}
-    mp = model_points or {}
-
-    trans = np.full((F_n, K), np.nan)
-    rot = np.full((F_n, K), np.nan)
-    add = np.full((F_n, K), np.nan)
-    adds = np.full((F_n, K), np.nan)
-    times = np.zeros(F_n)
-    iters = np.zeros(F_n, dtype=int)
-    losses = np.full(F_n, np.nan)
-    preds = np.tile(np.eye(4), (F_n, K, 1, 1))
-    gts = np.tile(np.eye(4), (F_n, K, 1, 1))
-    renders: List[np.ndarray] = []
+        print(f"  [{name}] init: coarse={init_info['coarse_loss']:.4f} fine={init_info['fine_loss']:.4f} "
+              f"in {init_time:.1f}s")
+    if motion_prior is not None:
+        motion_prior.initialize(opt.part_deltas.data)
 
     for fi, fr in enumerate(frames):
         t_frame = time.time()
 
-        if fi == 0:
-            obs = opt.frame                        # built by initialize_obj_pose
-        else:
-            cached = prefetcher.take(fi)
-            obs = cached if cached is not None else build_obs_with_rois(fr)
-            opt.set_frame(obs)
+        # ---- motion prior: warm start ------------------------------------ #
+        pred = None
+        check = motion_prior is not None and getattr(motion_prior, "check_loss", False)
+        if motion_prior is not None and fi > 0:
+            pred = motion_prior.predict(device).float()
+            if motion_prior.warm_start and not check:
+                opt.set_part_deltas(pred)
 
-        n_it = tcfg.track_niter
-        info = opt.step(niter=n_it, use_depth=tcfg.use_depth, use_rgb=tcfg.use_rgb)
+        # ---- observation + ROIs from the current pose; DINO extraction ---- #
+        torch.cuda.synchronize()
+        t_d = time.time()
+        obs = make_obs(fr)
+        opt.set_observation(obs)
+        if tcfg.use_dino:
+            if tcfg.use_roi:
+                for rf in obs.roi_frames:
+                    _ = rf.dino_feats
+            else:
+                _ = obs.frame.dino_feats
+        torch.cuda.synchronize()
+        dino_ms[fi] = (time.time() - t_d) * 1000.0
 
-        times[fi] = time.time() - t_frame
-        iters[fi] = n_it
+        # ---- pose optimisation ------------------------------------------- #
+        t_o = time.time()
+        if check and pred is not None and motion_prior.warm_start:
+            n_pred_kept += _choose_start(opt, obs, pred, tcfg)
+        info = opt.step(niter=tcfg.track_niter, use_depth=tcfg.use_depth, use_rgb=tcfg.use_rgb)
+        torch.cuda.synchronize()
+        opt_ms[fi] = (time.time() - t_o) * 1000.0
         losses[fi] = info.loss
 
-        # ---- prepare frame t+1 ROI if prefetching ----------------------- #
-        if fi + 1 < F_n and prefetch_dino:
-            prefetcher.submit(fi + 1, build_obs_with_rois(frames[fi + 1]))
+        # ---- motion prior: measurement update ----------------------------- #
+        if motion_prior is not None:
+            fused = motion_prior.update(opt.part_deltas.data, device)
+            if motion_prior.fuse:
+                opt.set_part_deltas(fused.float())
+                opt.apply_to_model()
 
-        # ---- score ------------------------------------------------------- #
+        times[fi] = time.time() - t_frame
+        deltas[fi] = opt.part_deltas.data.detach().cpu().numpy()
         P = opt.get_all_part2world().detach().cpu().numpy()
-        for gi in range(K):
-            gt_id = group_to_gt.get(gi, -1)
-            if gt_id < 0:
-                continue
-            T_gt = _gt_pose_for_group(seq, fi, gt_id, base_centroids[gi])
-            preds[fi, gi], gts[fi, gi] = P[gi], T_gt
-            trans[fi, gi] = translation_error_cm(P[gi], T_gt)
-            rot[fi, gi] = rotation_error_deg(P[gi], T_gt)
-            pts = mp.get(gt_id, mp.get(gi))
-            if pts is not None:
-                if isinstance(pts, torch.Tensor):
-                    pts = pts.detach().cpu().numpy()
-                bc = base_centroids[gi]
-                if isinstance(bc, torch.Tensor):
-                    bc = bc.detach().cpu().numpy()
-                local = pts - bc
-                add[fi, gi] = add_metric(local, P[gi], T_gt)
-                adds[fi, gi] = adds_metric(local, P[gi], T_gt)
-
-        if save_renders and fi % render_every == 0:
-            with torch.no_grad():
-                r = opt.render_full(cam)["rgb"].detach().cpu().numpy()
-            renders.append((np.clip(r, 0, 1) * 255).astype(np.uint8))
+        _score_frame(seq, fi, P, groups, group_to_gt, base_centroids, model_points, acc)
 
         if verbose and (fi % 10 == 0 or fi == F_n - 1):
             print(f"    [{name}] frame {fi:3d}/{F_n}  loss={info.loss:.4f}  "
-                  f"pos_err={np.nanmean(trans[fi]):.2f} cm  rot={np.nanmean(rot[fi]):.1f} deg  "
-                  f"iters={n_it}  {times[fi]*1000:.0f} ms")
+                  f"pos={np.nanmean(acc['trans'][fi]):.2f} cm  rot={np.nanmean(acc['rot'][fi]):.1f} deg  "
+                  f"{times[fi] * 1000:.0f} ms")
 
     model.load_snapshot(snapshot)
-
     diag = opt.depth_diagnostics()
-    if verbose and tcfg.use_depth and diag["depth_drop_rate"] > 0.5:
-        print(f"  [{name}] WARNING: the depth term was dropped on "
-              f"{diag['depth_drop_rate']:.0%} of evaluations -- the rendered "
-              f"accumulation never reached {tcfg.accumulation_thresh}. Train the "
-              f"splat longer or lower TrackingConfig.accumulation_thresh; until "
-              f"then the 'No Depth' ablation is not a real comparison.")
+    if motion_prior is not None and hasattr(motion_prior, "mean_nis"):
+        diag["kalman_mean_nis"] = motion_prior.mean_nis()
+    if motion_prior is not None and getattr(motion_prior, "check_loss", False):
+        diag["prediction_kept_rate"] = n_pred_kept / max((F_n - 1) * K, 1)
+    if verbose and tcfg.use_depth and diag["depth_drop_rate"] > 0.2:
+        print(f"  [{name}] WARNING: depth term dropped on {diag['depth_drop_rate']:.0%} of evaluations")
 
     return TrackingResult(
-        name=name, trans_err_cm=trans, rot_err_deg=rot, add=add, adds=adds,
-        frame_times=times, iters=iters, losses=losses,
-        reset_frames=[i for i, f in enumerate(frames) if getattr(f, "reset_event", False) or getattr(getattr(f, "event", None), "reset_event", False)],
-        hand_frames=[i for i, f in enumerate(frames) if getattr(f, "hand_visible", False) or getattr(getattr(f, "event", None), "hand_occlusion", False)],
-        pred_poses=preds, gt_poses=gts,
-        renders=renders, init_time=init_time, depth_diag=diag,
+        name=name, trans_err_cm=acc["trans"], rot_err_deg=acc["rot"], yaw_err_deg=acc["yaw"],
+        add=acc["add"], adds=acc["adds"], frame_times=times, dino_ms=dino_ms, opt_ms=opt_ms,
+        losses=losses, pred_poses=acc["preds"], gt_poses=acc["gts"], part_deltas=deltas,
+        occluded=np.array([bool(getattr(f, "occluded", False)) for f in frames]),
+        group_names=list(groups.names or []), init_time=init_time, diagnostics=diag,
     )
 
 
-# --------------------------------------------------------------------------- #
-# Ablations (Table I columns)
-# --------------------------------------------------------------------------- #
+@torch.no_grad()
+def _choose_start(opt, obs, pred: torch.Tensor, tcfg: TrackingConfig) -> int:
+    """Greedy per object: adopt the predicted pose if it lowers the tracking
+    loss versus the current estimate. Returns how many objects took it."""
+    def loss_at(d):
+        l, _ = opt.get_optim_loss(obs, d, use_dino=tcfg.use_dino, use_depth=tcfg.use_depth,
+                                  use_rgb=tcfg.use_rgb, use_roi=tcfg.use_roi)
+        return float("inf") if l is None else float(l)
+    cur = opt.part_deltas.data.clone()
+    best = loss_at(cur)
+    kept = 0
+    for k in range(cur.shape[0]):
+        cand = cur.clone()
+        cand[k] = pred[k]
+        lc = loss_at(cand)
+        if lc < best:
+            cur, best, kept = cand, lc, kept + 1
+    opt.set_part_deltas(cur)
+    return kept
 
 
-def run_ablations(
-    model: POGSModel,
+def static_baseline(
     groups: ObjectGroups,
-    seq: TrackingSequence,
-    dino_fn: DinoFn,
-    cfg: POGSConfig,
-    group_to_gt: Optional[Dict[int, int]] = None,
-    model_points: Optional[Dict[int, np.ndarray]] = None,
-    variants: Sequence[str] = ("POGS", "No Depth", "No DINO"),
-    max_frames: Optional[int] = None,
-    verbose: bool = True,
-    **kwargs,
-) -> Dict[str, TrackingResult]:
-    if group_to_gt is None:
-        group_to_gt = kwargs.get("group2gt", {})
-    import copy
-
-    out: Dict[str, TrackingResult] = {}
-    for v in variants:
-        tc = copy.deepcopy(cfg.tracking)
-        if v == "No Depth":
-            tc.use_depth = False
-        elif v == "No DINO":
-            tc.use_dino = False
-            tc.use_rgb = True
-        if verbose:
-            print(f"\n--- ablation: {v} (depth={tc.use_depth}, dino={tc.use_dino}, rgb={tc.use_rgb}) ---")
-        out[v] = track_sequence(
-            model, groups, seq, dino_fn, cfg, group_to_gt, name=v,
-            tracking_cfg=tc, model_points=model_points,
-            max_frames=max_frames, verbose=verbose,
-        )
-    return out
-
-
-def results_table(results: Dict[str, TrackingResult], thresh_cm: float = 5.0):
-    """Table-I-shaped comparison across variants."""
-    rows = [r.summary(thresh_cm) for r in results.values()]
-    try:
-        import pandas as pd
-
-        df = pd.DataFrame(rows).set_index("name")
-        return df.round(3)
-    except ImportError:
-        return rows
-
-
-# --------------------------------------------------------------------------- #
-# Offline vs online protocols
-# --------------------------------------------------------------------------- #
-
-
-def online_vs_offline(
-    model: POGSModel,
-    groups: ObjectGroups,
-    seq: TrackingSequence,
-    dino_fn: DinoFn,
-    cfg: POGSConfig,
+    seq,
     group_to_gt: Dict[int, int],
     model_points: Optional[Dict[int, np.ndarray]] = None,
-    offline_smoothing: bool = True,
-    max_frames: Optional[int] = None,
-    verbose: bool = True,
-) -> Dict[str, TrackingResult]:
-    """POGS as shipped is *causal*: frame t only ever sees frames <= t.
-
-    ``offline`` here means running the same causal tracker and then applying an
-    RTS-style fixed-interval smoother over the recorded trajectory, which is
-    only legal when the whole sequence is available.  This isolates exactly how
-    much accuracy the online constraint costs.
-    """
-    out = {}
-    out["online (causal)"] = track_sequence(
-        model, groups, seq, dino_fn, cfg, group_to_gt, name="online (causal)",
-        model_points=model_points,
-        max_frames=max_frames, verbose=verbose,
-    )
-    if offline_smoothing:
-        sm = smooth_trajectory(out["online (causal)"])
-        out["offline (smoothed)"] = sm
-    return out
-
-
-def smooth_trajectory(result: TrackingResult, window_size: int = 5) -> TrackingResult:
-    """Non-causal zero-phase smoothing of the recorded pose trajectory.
-
-    Translation is filtered forward-backward; rotation is averaged in the
-    tangent space around each frame's estimate. Metrics are then recomputed.
-    """
-    import copy
-    from .geometry import quat_to_rotmat, rotmat_to_quat, so3_exp, so3_log
-
-    F_n, K = result.pred_poses.shape[:2]
-    win = 5
-    half = win // 2
-    poses = result.pred_poses.copy()
-    for gi in range(K):
-        T = poses[:, gi]
-        pos = T[:, :3, 3]
-        pos_s = np.stack(
-            [np.convolve(pos[:, d], np.ones(win) / win, mode="same") for d in range(3)], axis=-1
-        )
-        # fix the convolution edges
-        pos_s[:half] = pos[:half]
-        pos_s[-half:] = pos[-half:]
-        R = torch.from_numpy(T[:, :3, :3]).float()
-        q = rotmat_to_quat(R)
-        q_s = q.clone()
-        for f in range(half, F_n - half):
-            ref = q[f]
-            tang = torch.stack(
-                [so3_log(_qmul(_qconj(ref), q[f + k])) for k in range(-half, half + 1)]
-            ).mean(0)
-            q_s[f] = _qmul(ref, so3_exp(tang))
-        Rs = quat_to_rotmat(q_s).numpy()
-        poses[:, gi, :3, :3] = Rs
-        poses[:, gi, :3, 3] = pos_s
-
-    trans = np.full((F_n, K), np.nan)
-    rot = np.full((F_n, K), np.nan)
-    for f in range(F_n):
+    name: str = "Static (no motion)",
+) -> TrackingResult:
+    """Trivial reference: every object is predicted to stay at its scan pose.
+    Any tracker must beat this to be doing anything at all."""
+    F_n, K = len(seq.frames), groups.num_groups
+    base_centroids = {gi: groups.init_p2w[gi, :3].detach().cpu().numpy() for gi in range(K)}
+    acc = _alloc(F_n, K)
+    for fi in range(F_n):
+        P = np.tile(np.eye(4), (K, 1, 1))
         for gi in range(K):
-            if np.isnan(result.trans_err_cm[f, gi]):
-                continue
-            trans[f, gi] = translation_error_cm(poses[f, gi], result.gt_poses[f, gi])
-            rot[f, gi] = rotation_error_deg(poses[f, gi], result.gt_poses[f, gi])
-
-    out = copy.copy(result)
-    out.name = "offline (smoothed)"
-    out.trans_err_cm = trans
-    out.rot_err_deg = rot
-    out.pred_poses = poses
-    out.renders = []
-    return out
-
-
-def _qmul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    from .geometry import quat_multiply
-
-    return quat_multiply(a.unsqueeze(0), b.unsqueeze(0)).squeeze(0)
-
-
-def _qconj(a: torch.Tensor) -> torch.Tensor:
-    from .geometry import quat_conjugate
-
-    return quat_conjugate(a.unsqueeze(0)).squeeze(0)
-
-
-# --------------------------------------------------------------------------- #
-# Speed study
-# --------------------------------------------------------------------------- #
-
-
-def speed_study(
-    model: POGSModel,
-    groups: ObjectGroups,
-    seq: TrackingSequence,
-    dino_fn: DinoFn,
-    cfg: POGSConfig,
-    group_to_gt: Optional[Dict[int, int]] = None,
-    iter_counts: Sequence[int] = (25, 15, 8),
-    model_points: Optional[Dict[int, np.ndarray]] = None,
-    max_frames: Optional[int] = None,
-    verbose: bool = True,
-    **kwargs,
-) -> Dict[str, TrackingResult]:
-    if group_to_gt is None:
-        group_to_gt = kwargs.get("group2gt", {})
-    """Accuracy/latency trade-off across optimizer iteration counts."""
-    import copy
-
-    out: Dict[str, TrackingResult] = {}
-    for n in iter_counts:
-        tc = copy.deepcopy(cfg.tracking)
-        tc.track_niter = n
-        out[f"{n} iters"] = track_sequence(
-            model, groups, seq, dino_fn, cfg, group_to_gt, name=f"{n} iters",
-            tracking_cfg=tc, model_points=model_points,
-            max_frames=max_frames, verbose=verbose,
-        )
-    return out
-
-
-# --------------------------------------------------------------------------- #
-# Sequential Object Reset (Sec. V-A) -- the rest of Table I
-# --------------------------------------------------------------------------- #
-
-
-def _delta_from_pose(T: np.ndarray, scan_centroid: np.ndarray) -> np.ndarray:
-    """POGS reports a pose as ``[R | transformed centroid]``. Recover the
-    world-frame rigid delta that maps scan-time geometry onto it."""
-    out = np.eye(4)
-    out[:3, :3] = T[:3, :3]
-    out[:3, 3] = T[:3, 3] - T[:3, :3] @ scan_centroid
-    return out
-
-
-def _placement_point(points: np.ndarray) -> np.ndarray:
-    """Where the robot would set an object down on this one: the centre of its
-    top face."""
-    return np.array([points[:, 0].mean(), points[:, 1].mean(), points[:, 2].max()])
-
-
-@dataclass
-class ResetAttempt:
-    frame: int
-    pick_success: bool
-    place_success: bool
-    contact_err_cm: float
-    """Distance from the planned gripper contacts to the object's true surface.
-    Above ``contact_tol_cm`` the jaws close on empty air -- a failed pick."""
-    place_err_cm: float
-    """'the translation error between the intended and actual placement
-    positions' (Sec. V-A)."""
-    pick_pose_err_cm: float
-    n_grasps: int
-
-
-@dataclass
-class ResetProtocolResult:
-    """One trial of the Sec. V-A sequential-object-reset benchmark."""
-
-    name: str
-    tier: int
-    pick_name: str
-    place_name: str
-    attempts: List[ResetAttempt]
-    tracking: TrackingResult
-    contact_tol_cm: float = 1.0
-    place_tol_cm: float = 5.0
-
-    @property
-    def n(self) -> int:
-        return len(self.attempts)
-
-    def successful_pick_rate(self) -> Tuple[int, int]:
-        return sum(a.pick_success for a in self.attempts), self.n
-
-    def successful_place_rate(self) -> Tuple[int, int]:
-        """The paper only counts a place attempt after a successful pick."""
-        picked = [a for a in self.attempts if a.pick_success]
-        return sum(a.place_success for a in picked), len(picked)
-
-    def consecutive_resets(self) -> Tuple[int, float]:
-        """'Consecutive OR refers to a single trial with repeated Object Resets
-        without losing tracking' -- a reset counts only if both the pick and the
-        place succeeded."""
-        runs, cur = [], 0
-        for a in self.attempts:
-            if a.pick_success and a.place_success:
-                cur += 1
-            else:
-                runs.append(cur)
-                cur = 0
-        runs.append(cur)
-        return (max(runs) if runs else 0), (float(np.mean(runs)) if runs else 0.0)
-
-    def summary(self) -> Dict[str, object]:
-        mx, mean = self.consecutive_resets()
-        pick_ok, pick_n = self.successful_pick_rate()
-        place_ok, place_n = self.successful_place_rate()
-        errs = np.array([a.place_err_cm for a in self.attempts], dtype=float)
-        return {
-            "name": self.name,
-            "tier": self.tier,
-            "task": f"{self.pick_name} to {self.place_name}",
-            "max_consecutive_or": mx,
-            "mean_consecutive_or": round(mean, 2),
-            "successful_pick_rate": f"{pick_ok}/{pick_n}",
-            "successful_place_rate": f"{place_ok}/{place_n}",
-            "mean_position_error_cm": round(float(np.nanmean(errs)), 2) if len(errs) else float("nan"),
-            "std_position_error_cm": round(float(np.nanstd(errs)), 2) if len(errs) else float("nan"),
-        }
-
-
-def evaluate_pick(
-    pogs_points_at_estimate: np.ndarray,
-    true_surface_points: np.ndarray,
-    contact_tol_cm: float = 1.0,
-    grasp_kwargs: Optional[Dict[str, object]] = None,
-) -> Tuple[bool, float, int]:
-    """Would the grasp POGS plans actually land on the object?
-
-    The paper's failure mode is explicit: resets continue 'until POGS loses
-    tracking of the objects, defined as when repeated grasping failures occur
-    due to irrecoverable errors in object state estimation'.  So a pick is
-    scored by planning on POGS's *belief* about the object -- the Gaussian means
-    at the estimated pose, which is exactly what Sec. IV-E hands to
-    Contact-GraspNet -- and then checking the planned contacts against the
-    object's *true* surface.  A pose error larger than the gripper pad closes
-    the jaws on empty air.
-    """
-    from sklearn.neighbors import NearestNeighbors
-
-    from .grasp import nms_grasps, sample_antipodal_grasps
-
-    kw = dict(n_candidates=8000, seed=0)
-    kw.update(grasp_kwargs or {})
-    gs = nms_grasps(sample_antipodal_grasps(pogs_points_at_estimate, **kw))
-    if len(gs) == 0 or len(true_surface_points) < 4:
-        return False, float("inf"), len(gs)
-
-    jaws = gs.contacts[0]          # (2, 3) the two jaw contacts of the best grasp
-    nn = NearestNeighbors(n_neighbors=1).fit(true_surface_points)
-    d, _ = nn.kneighbors(jaws)
-    err_cm = float(d.max() * 100.0)
-    return err_cm <= contact_tol_cm, err_cm, len(gs)
-
-
-def object_reset_protocol(
-    model: POGSModel,
-    groups: ObjectGroups,
-    seq: TrackingSequence,
-    dino_fn: DinoFn,
-    cfg: POGSConfig,
-    group_to_gt: Dict[int, int],
-    pick_group: int,
-    place_group: int,
-    model_points: Dict[int, np.ndarray],
-    name: str = "POGS",
-    tier: int = 1,
-    pick_name: str = "object",
-    place_name: str = "target",
-    tracking_cfg: Optional[TrackingConfig] = None,
-    contact_tol_cm: float = 1.0,
-    place_tol_cm: float = 5.0,
-    grasp_kwargs: Optional[Dict[str, object]] = None,
-    result: Optional[TrackingResult] = None,
-    max_frames: Optional[int] = None,
-    verbose: bool = True,
-) -> ResetProtocolResult:
-    """Run the Sec. V-A protocol and score every row of Table I.
-
-    At each scripted reset the robot (a) plans a grasp on the pick object using
-    POGS's estimate of where it is, and (b) sets it down on the place object,
-    again using POGS's estimate.  Both actions are then scored against ground
-    truth -- the quantity the real experiment measured with calipers.
-
-    Pass ``result`` to score an already-computed :func:`track_sequence` run
-    instead of re-tracking.
-    """
-    res = result if result is not None else track_sequence(
-        model, groups, seq, dino_fn, cfg, group_to_gt, name=name,
-        tracking_cfg=tracking_cfg,
-        model_points=model_points, max_frames=max_frames, verbose=verbose,
-    )
-
-    means = model.gauss_params["means"].data.detach().cpu().numpy()
-    pick_pts_scan = means[groups.group_masks[pick_group].cpu().numpy()]
-    place_pts_scan = means[groups.group_masks[place_group].cpu().numpy()]
-    c_pick = groups.init_p2w[pick_group, :3].detach().cpu().numpy()
-    c_place = groups.init_p2w[place_group, :3].detach().cpu().numpy()
-    place_point_scan = _placement_point(place_pts_scan)
-
-    gt_pick = group_to_gt.get(pick_group, -1)
-    mp_pick = model_points.get(gt_pick)
-    if mp_pick is None or len(mp_pick) == 0:
-        raise ValueError(
-            f"object_reset_protocol needs ground-truth surface points for the pick "
-            f"object (gt id {gt_pick}); pass them via model_points."
-        )
-
-    attempts: List[ResetAttempt] = []
-    for f in res.reset_frames:
-        if f >= res.pred_poses.shape[0]:
-            continue
-        d_pick_est = _delta_from_pose(res.pred_poses[f, pick_group], c_pick)
-        d_pick_gt = _delta_from_pose(res.gt_poses[f, pick_group], c_pick)
-        d_place_est = _delta_from_pose(res.pred_poses[f, place_group], c_place)
-        d_place_gt = _delta_from_pose(res.gt_poses[f, place_group], c_place)
-
-        pts_est = pick_pts_scan @ d_pick_est[:3, :3].T + d_pick_est[:3, 3]
-        true_surf = mp_pick @ d_pick_gt[:3, :3].T + d_pick_gt[:3, 3]
-        ok_pick, contact_err, n_g = evaluate_pick(
-            pts_est, true_surf, contact_tol_cm, grasp_kwargs
-        )
-
-        p_est = d_place_est[:3, :3] @ place_point_scan + d_place_est[:3, 3]
-        p_gt = d_place_gt[:3, :3] @ place_point_scan + d_place_gt[:3, 3]
-        place_err = float(np.linalg.norm(p_est - p_gt) * 100.0)
-
-        attempts.append(
-            ResetAttempt(
-                frame=f,
-                pick_success=bool(ok_pick),
-                place_success=bool(ok_pick and place_err <= place_tol_cm),
-                contact_err_cm=contact_err,
-                place_err_cm=place_err,
-                pick_pose_err_cm=float(res.trans_err_cm[f, pick_group]),
-                n_grasps=n_g,
-            )
-        )
-        if verbose:
-            print(f"    reset @frame {f:3d}: pick {'OK ' if ok_pick else 'FAIL'} "
-                  f"(contact {contact_err:.2f} cm, {n_g} grasps)  "
-                  f"place err {place_err:.2f} cm")
-
-    return ResetProtocolResult(
-        name=name, tier=tier, pick_name=pick_name, place_name=place_name,
-        attempts=attempts, tracking=res,
-        contact_tol_cm=contact_tol_cm, place_tol_cm=place_tol_cm,
+            P[gi, :3, 3] = base_centroids[gi]
+        _score_frame(seq, fi, P, groups, group_to_gt, base_centroids, model_points, acc)
+    z = np.zeros(F_n)
+    return TrackingResult(
+        name=name, trans_err_cm=acc["trans"], rot_err_deg=acc["rot"], yaw_err_deg=acc["yaw"],
+        add=acc["add"], adds=acc["adds"], frame_times=z, dino_ms=z * np.nan, opt_ms=z * np.nan,
+        losses=z * np.nan, pred_poses=acc["preds"], gt_poses=acc["gts"],
+        part_deltas=np.tile(identity_posevec(K).numpy(), (F_n, 1, 1)),
+        occluded=np.array([bool(getattr(f, "occluded", False)) for f in seq.frames]),
+        group_names=list(groups.names or []),
     )
 
 
-def table_one(results: Sequence[ResetProtocolResult]):
-    """The Table I layout: one column per (task, tier, variant)."""
-    rows = [
-        "Max Consecutive OR", "Mean Consecutive OR", "Successful Pick Rate",
-        "Successful Place Rate", "Mean Position Error (cm)", "Std Position Error (cm)",
-    ]
-    cols: Dict[str, List[object]] = {}
-    for r in results:
-        s = r.summary()
-        key = f"{s['task']} | Tier {r.tier} | {r.name}"
-        cols[key] = [
-            s["max_consecutive_or"], s["mean_consecutive_or"],
-            s["successful_pick_rate"], s["successful_place_rate"],
-            s["mean_position_error_cm"], s["std_position_error_cm"],
-        ]
-    try:
-        import pandas as pd
+# --------------------------------------------------------------------------- #
+# Variants (paper ablations)
+# --------------------------------------------------------------------------- #
 
-        return pd.DataFrame(cols, index=rows)
-    except ImportError:
-        return {"index": rows, **cols}
+
+def variant_config(base: TrackingConfig, variant: str) -> TrackingConfig:
+    """Tracking settings for the named variant.
+
+    POGS                        paper Sec. IV-D: DINO + depth every frame
+    POGS (release: no per-frame depth)
+                                the released ``step()``: DINO only per frame,
+                                depth only in the init fine pass
+    No Depth                    paper ablation: depth off everywhere
+    No DINO                     paper ablation: 'optimized with RGB
+                                substituting for DINO features'
+    N iters                     POGS with N optimiser steps per frame
+    """
+    tc = copy.deepcopy(base)
+    if variant == "POGS":
+        pass
+    elif variant == "POGS (release: no per-frame depth)":
+        tc.use_depth, tc.init_use_depth = False, True
+    elif variant == "No Depth":
+        tc.use_depth, tc.init_use_depth = False, False
+    elif variant == "No DINO":
+        tc.use_dino, tc.use_rgb = False, True
+    elif variant.endswith(" iters"):
+        tc.track_niter = int(variant.split()[0])
+    else:
+        raise ValueError(f"unknown variant {variant!r}")
+    return tc
+
+
+def results_table(results: Dict[str, TrackingResult], group: Optional[int] = None):
+    import pandas as pd
+
+    rows = [r.summary(group) for r in results.values()]
+    return pd.DataFrame(rows).set_index("name")

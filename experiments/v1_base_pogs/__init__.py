@@ -1,4 +1,1 @@
-"""
-POGS v1: Pick-and-Place Photorealistic Tabletop Benchmark.
-Features 5 household objects on the floor, a low staging table, and clean Base POGS tracking.
-"""
+"""v1: base POGS, as close as possible to the ICRA 2025 paper and its release."""

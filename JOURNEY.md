@@ -1,10 +1,76 @@
-# POGS: Progress Journey, Current Status & Roadmap
+# POGS: Progress Journey
 
-> **Reference**: ICRA 2025: *POGS: Open-Vocabulary Object Tracking with 3D Gaussian Splats*  
-> **Target Scope**: Strict Base Original POGS on Synthetic Pick-and-Place Tabletop Scenes  
-> **Timestamp**: September 29, 2026
+> **Paper**: *Persistent Object Gaussian Splat (POGS) for Tracking Human and Robot
+> Manipulation of Irregularly Shaped Objects*, ICRA 2025.
 
 ---
+
+## 0. Audit and rebuild (2026-11-08) -- READ FIRST
+
+A full audit against the paper and `POGS-author-github` found that **every result
+reported before this date is invalid**. The history below is kept for context
+only. Retracted claims and their causes:
+
+| Earlier claim | Why it does not hold |
+|---|---|
+| v1 tracks the mug at ~1.0 cm / 5 deg | The DINO PCA basis was never saved: every tracking run re-fitted it on the first tracking frame, so observed and rendered DINO features lived in different spaces. Rotation error was no better than predicting "no rotation" (5.1 vs 4.2 deg, 6.4 vs 6.8 deg); translation was carried by a depth weight of 150 (release: 3.7). |
+| "OpenCLIP singulates exactly 1,180 mug Gaussians" | Clustering copied ground-truth object ids from the nearest seed points. No HDBSCAN, grouping features or CLIP were used. |
+| v1 = faithful reproduction | 400 (checkpoint: 250) instead of 4000 training steps, so densification never ran; ROI tracking off; upright-yaw prior on; LR, depth weight and gradient clipping changed; background rendered during tracking. |
+| v2 Kalman results | v2's "Base POGS" was not v1 (no init, different depth cut-off); the yaw-only filter overwrote the optimiser state; Kalman made tracking 3x worse; "ADD (<2 cm)" was a frame fraction, not ADD. |
+| v3 mustard results (20-37 cm) | `opt.step()` (25 iterations) was called 25 times per frame; position error used `R c + t` instead of `c + t`. |
+| "Outperforms the paper (1.0 vs 1.8-2.5 cm)" | Compared synthetic centroid error with perfect depth against real placement error measured with calipers. |
+| 30 deg "respected / threshold / violated" scenarios | Misreading: 30 deg is the in-gripper tool perturbation of Table II, not a trajectory limit. |
+| Paper title "POGS: Open-Vocabulary Object Tracking with 3D Gaussian Splats", POGS = "Pose Optimization with Gaussian Splatting" | Both wrong. |
+
+What was rebuilt (details in `Claude.md`):
+- Release defaults everywhere (`common/config.py`); gsplat CUDA backend built in
+  `.venv` (`tools/setup_gsplat.sh`); splatfacto densification via gsplat
+  `DefaultStrategy`.
+- Self-contained checkpoints with the PCA basis; `DinoExtractor` refuses to run
+  without it.
+- Real grouping: HDBSCAN on distilled grouping features, Detic-like masks with the
+  floor/table in the negative mask, release-style support-plane cut. GT is
+  evaluation-only.
+- One shared tracking loop (`common/evaluate.py`) with a motion-prior hook; v2 is
+  v1 plus a proper SE(3) constant-velocity Kalman filter; v3 is v1 on a second target.
+- New benchmark: balanced seeds, gripper occlusion, depth noise on tracking
+  frames, 60 frames at 5 Hz, rotation tiers 15/30/90 deg, all objects tracked.
+- Metrics: ADD/ADD-S, yaw error, the paper's 3 cm / 5 deg success rate, a static
+  baseline in every table, depth/ROI diagnostics.
+- Regression tests in `tests/`.
+
+---
+
+## 0b. Benchmark redesign and first full training (2026-11-08)
+
+- New benchmark (`scene_generator/pick_place_benchmark.py`): 12 conditions x 3
+  random trajectories, plus speed (frame stride) and depth noise applied at load
+  time; 54 cases. Built around the paper's own limitations so a modified tracker
+  can be compared per condition (see Claude.md "Benchmark").
+- Full 4000-step training: 392k Gaussians, train-view PSNR 31.3 dB, mean depth
+  error 2.6 cm (mean over all pixels incl. far floor). Grouping: 7 clusters, all 5
+  objects tracked, floor+table rejected as background, IoU 0.62-0.98 (soup can
+  lowest), purity 0.88, no duplicates.
+- Tracker was ~18 s/frame: advanced-indexing gather in `apply_group_deltas` had a
+  very slow backward, and all 392k Gaussians were transformed per render. Fixed
+  (compose per group + `index_select`, transform only rendered Gaussians): 2.3 s
+  per frame with 5 objects, ~0.5 s with the target only.
+- Smoke test findings (base POGS, mug, seed 0): no occluder -> position 0.8 cm but
+  yaw lags (plain cylinder, only the handle constrains yaw), rotation error 10 deg.
+  With the gripper -> the gripper's depth tilts the mug ~30 deg while held,
+  recovering when it leaves: the occlusion limitation of Sec. VI. Tracking all
+  five objects drags static ones through their ROIs (12 cm drift), so the
+  protocol tracks the manipulated object(s) only.
+
+- First full suite: v1 done; v2's undamped Kalman warm start diverged by metres
+  whenever tracking slipped (positive feedback: the warm-started optimiser's
+  output is not independent of the prediction). Fixed with velocity damping,
+  speed limits and an optional loss check; old KF runs discarded, v2 re-run.
+- The paper's 3 cm / 5 deg success is ~11% for every method (gripper-induced
+  tilt dominates rotation), so tables lead with ADD-S < 0.1 d success and a
+  lost-frame rate (>10 cm). Results: RESULTS.md.
+
+## Historical log (pre-audit; results invalid)
 
 ## 1. Project Overview & Target Objectives
 The objective of this project is to implement and validate the official **Base Original POGS** (Pose Optimization with Gaussian Splatting) framework as defined in the ICRA 2025 paper and the author's reference codebase (`POGS-author-github`).
