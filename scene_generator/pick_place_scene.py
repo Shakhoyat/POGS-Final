@@ -29,181 +29,83 @@ from common.geometry import PinholeCamera
 
 # --------------------------------------------------------------------------- #
 # Real-World Household Objects (Optimized for OpenCLIP Recognition)
+#
+# Primitive ``scale`` is a HALF-extent (boxes span [-s, s], cylinders have
+# radius s_x and half-height s_z). Materials: see ``materials.py``; texture
+# frequencies are features per metre in the primitive's own frame.
 # --------------------------------------------------------------------------- #
 
-def ceramic_coffee_mug(color: Tuple[float, float, float] = (0.88, 0.18, 0.14)) -> List[Primitive]:
-    """Glossy red ceramic coffee mug with inner cream glaze, handle, and espresso."""
+def ceramic_coffee_mug(color: Tuple[float, float, float] = (0.80, 0.12, 0.10)) -> List[Primitive]:
+    """Glossy red glazed ceramic mug with cream interior, handle and coffee."""
+    glaze = dict(color=color, pattern="noise", texture_freq=180.0, texture_amp=0.05, roughness=0.12)
     return [
-        # Mug outer cylinder
-        Primitive(
-            CYLINDER,
-            scale=(0.038, 0.038, 0.048),
-            offset=(0.0, 0.0, 0.048),
-            color=color,
-            texture_freq=12.0, texture_amp=0.03,
-        ),
-        # Inner cavity (cream glaze)
-        Primitive(
-            CYLINDER,
-            scale=(0.033, 0.033, 0.046),
-            offset=(0.0, 0.0, 0.051),
-            color=(0.95, 0.94, 0.90),
-            texture_freq=8.0, texture_amp=0.01,
-        ),
-        # Espresso liquid surface
-        Primitive(
-            CYLINDER,
-            scale=(0.032, 0.032, 0.003),
-            offset=(0.0, 0.0, 0.074),
-            color=(0.18, 0.10, 0.06),
-            texture_freq=20.0, texture_amp=0.02,
-        ),
-        # Handle upper bar
-        Primitive(
-            BOX,
-            scale=(0.006, 0.018, 0.006),
-            offset=(0.045, 0.0, 0.070),
-            color=color,
-            texture_freq=10.0, texture_amp=0.02,
-        ),
-        # Handle grip bar
-        Primitive(
-            BOX,
-            scale=(0.006, 0.007, 0.030),
-            offset=(0.060, 0.0, 0.050),
-            color=color,
-            texture_freq=10.0, texture_amp=0.02,
-        ),
-        # Handle lower bar
-        Primitive(
-            BOX,
-            scale=(0.006, 0.018, 0.006),
-            offset=(0.045, 0.0, 0.030),
-            color=color,
-            texture_freq=10.0, texture_amp=0.02,
-        ),
+        Primitive(CYLINDER, scale=(0.038, 0.038, 0.048), offset=(0.0, 0.0, 0.048), **glaze),
+        # inner glaze (a thin cream ring shows at the rim) and the coffee surface
+        # just above it -- the primitives are solid, so the coffee must be on top
+        Primitive(CYLINDER, scale=(0.033, 0.033, 0.0482), offset=(0.0, 0.0, 0.0482),
+                  color=(0.93, 0.91, 0.86), pattern="noise", texture_freq=120.0, texture_amp=0.03, roughness=0.15),
+        Primitive(CYLINDER, scale=(0.029, 0.029, 0.0010), offset=(0.0, 0.0, 0.0960),
+                  color=(0.22, 0.12, 0.06), color2=(0.36, 0.21, 0.11), pattern="blotch",
+                  texture_freq=260.0, texture_amp=0.05, roughness=0.08),
+        # handle: upper bar, grip, lower bar
+        Primitive(BOX, scale=(0.006, 0.018, 0.006), offset=(0.045, 0.0, 0.070), **glaze),
+        Primitive(BOX, scale=(0.006, 0.007, 0.030), offset=(0.060, 0.0, 0.050), **glaze),
+        Primitive(BOX, scale=(0.006, 0.018, 0.006), offset=(0.045, 0.0, 0.030), **glaze),
     ]
 
 
 def mustard_squeeze_bottle() -> List[Primitive]:
-    """YCB-style French's yellow mustard bottle with red nozzle cap."""
+    """YCB-style yellow mustard bottle: glossy plastic, red cap, printed label."""
     return [
-        # Main bottle body (Golden Yellow)
-        Primitive(
-            ELLIPSOID,
-            scale=(0.036, 0.024, 0.062),
-            offset=(0.0, 0.0, 0.062),
-            color=(0.96, 0.78, 0.08),
-            texture_freq=15.0, texture_amp=0.04,
-        ),
-        # Neck
-        Primitive(
-            CYLINDER,
-            scale=(0.012, 0.012, 0.012),
-            offset=(0.0, 0.0, 0.128),
-            color=(0.94, 0.76, 0.08),
-            texture_freq=20.0, texture_amp=0.02,
-        ),
-        # Red squeeze nozzle
-        Primitive(
-            CYLINDER,
-            scale=(0.008, 0.008, 0.018),
-            offset=(0.0, 0.0, 0.145),
-            color=(0.88, 0.12, 0.10),
-            texture_freq=30.0, texture_amp=0.02,
-        ),
-        # Front label band
-        Primitive(
-            BOX,
-            scale=(0.026, 0.002, 0.022),
-            offset=(0.0, 0.022, 0.060),
-            color=(0.98, 0.97, 0.92),
-            texture_freq=35.0, texture_amp=0.05,
-        ),
+        Primitive(ELLIPSOID, scale=(0.036, 0.024, 0.062), offset=(0.0, 0.0, 0.062),
+                  color=(0.95, 0.76, 0.07), pattern="noise", texture_freq=150.0, texture_amp=0.05, roughness=0.25),
+        Primitive(CYLINDER, scale=(0.012, 0.012, 0.012), offset=(0.0, 0.0, 0.128),
+                  color=(0.93, 0.74, 0.07), pattern="noise", texture_freq=150.0, texture_amp=0.04, roughness=0.25),
+        Primitive(CYLINDER, scale=(0.008, 0.008, 0.018), offset=(0.0, 0.0, 0.145),
+                  color=(0.85, 0.10, 0.08), pattern="noise", texture_freq=200.0, texture_amp=0.05, roughness=0.35),
+        # front label: white with red bands
+        Primitive(BOX, scale=(0.026, 0.002, 0.022), offset=(0.0, 0.022, 0.060),
+                  color=(0.97, 0.96, 0.91), color2=(0.80, 0.12, 0.10), pattern="stripes",
+                  texture_freq=180.0, texture_amp=0.05, roughness=0.6),
     ]
 
 
 def tomato_soup_can() -> List[Primitive]:
-    """Campbell's tomato soup can with red & white band and tin metal rims."""
+    """Two-tone (red over white) soup can with brushed tin lids and gold seal."""
+    tin = dict(color=(0.78, 0.80, 0.84), pattern="brushed", texture_freq=400.0, texture_amp=0.10,
+               roughness=0.30, metallic=0.85)
     return [
-        # Main red cylinder
-        Primitive(
-            CYLINDER,
-            scale=(0.032, 0.032, 0.046),
-            offset=(0.0, 0.0, 0.048),
-            color=(0.82, 0.14, 0.12),
-            texture_freq=20.0, texture_amp=0.04,
-        ),
-        # Tin top lid
-        Primitive(
-            CYLINDER,
-            scale=(0.033, 0.033, 0.003),
-            offset=(0.0, 0.0, 0.096),
-            color=(0.82, 0.84, 0.88),
-            texture_freq=50.0, texture_amp=0.03,
-        ),
-        # Tin bottom rim
-        Primitive(
-            CYLINDER,
-            scale=(0.033, 0.033, 0.003),
-            offset=(0.0, 0.0, 0.003),
-            color=(0.82, 0.84, 0.88),
-            texture_freq=50.0, texture_amp=0.03,
-        ),
-        # Gold medal seal
-        Primitive(
-            CYLINDER,
-            scale=(0.010, 0.010, 0.002),
-            offset=(0.0, 0.031, 0.048),
-            rot_euler=(math.pi / 2, 0.0, 0.0),
-            color=(0.94, 0.78, 0.18),
-            texture_freq=40.0, texture_amp=0.04,
-        ),
+        Primitive(CYLINDER, scale=(0.032, 0.032, 0.046), offset=(0.0, 0.0, 0.048),
+                  color=(0.78, 0.10, 0.09), color2=(0.95, 0.94, 0.90), pattern="split",
+                  texture_freq=200.0, texture_amp=0.06, roughness=0.40),
+        Primitive(CYLINDER, scale=(0.033, 0.033, 0.003), offset=(0.0, 0.0, 0.096), **tin),
+        Primitive(CYLINDER, scale=(0.033, 0.033, 0.003), offset=(0.0, 0.0, 0.003), **tin),
+        Primitive(CYLINDER, scale=(0.010, 0.010, 0.002), offset=(0.0, 0.031, 0.048),
+                  rot_euler=(math.pi / 2, 0.0, 0.0), color=(0.92, 0.74, 0.20), pattern="noise",
+                  texture_freq=300.0, texture_amp=0.08, roughness=0.25, metallic=0.9),
     ]
 
 
 def red_apple() -> List[Primitive]:
-    """Glossy fresh red apple with small dark stem."""
+    """Glossy red apple with yellow-green streaks and a dark stem."""
     return [
-        # Apple main body (slightly indented spheroid)
-        Primitive(
-            ELLIPSOID,
-            scale=(0.038, 0.038, 0.034),
-            offset=(0.0, 0.0, 0.034),
-            color=(0.86, 0.10, 0.12),
-            texture_freq=25.0, texture_amp=0.08,
-        ),
-        # Stem top
-        Primitive(
-            CYLINDER,
-            scale=(0.002, 0.002, 0.010),
-            offset=(0.0, 0.0, 0.072),
-            rot_euler=(0.15, 0.15, 0.0),
-            color=(0.28, 0.18, 0.10),
-            texture_freq=40.0, texture_amp=0.05,
-        ),
+        Primitive(ELLIPSOID, scale=(0.038, 0.038, 0.034), offset=(0.0, 0.0, 0.034),
+                  color=(0.72, 0.07, 0.08), color2=(0.82, 0.40, 0.14), pattern="blotch",
+                  texture_freq=420.0, texture_amp=0.12, roughness=0.18),
+        Primitive(CYLINDER, scale=(0.002, 0.002, 0.010), offset=(0.0, 0.0, 0.072), rot_euler=(0.15, 0.15, 0.0),
+                  color=(0.28, 0.18, 0.10), pattern="noise", texture_freq=300.0, texture_amp=0.10, roughness=0.8),
     ]
 
 
 def cereal_box() -> List[Primitive]:
-    """Mini breakfast cereal box (cardboard box packaging)."""
+    """Cardboard cereal box: blue print with yellow patches and a front band."""
     return [
-        # Cardboard box
-        Primitive(
-            BOX,
-            scale=(0.035, 0.055, 0.075),
-            offset=(0.0, 0.0, 0.075),
-            color=(0.20, 0.55, 0.82), # Vibrant blue cereal branding
-            texture_freq=22.0, texture_amp=0.12,
-        ),
-        # Front splash band
-        Primitive(
-            BOX,
-            scale=(0.036, 0.002, 0.035),
-            offset=(0.0, 0.056, 0.075),
-            color=(0.96, 0.84, 0.15), # Golden cereal splash
-            texture_freq=40.0, texture_amp=0.10,
-        ),
+        Primitive(BOX, scale=(0.035, 0.055, 0.075), offset=(0.0, 0.0, 0.075),
+                  color=(0.16, 0.45, 0.78), color2=(0.96, 0.82, 0.18), pattern="blotch",
+                  texture_freq=60.0, texture_amp=0.10, roughness=0.85),
+        Primitive(BOX, scale=(0.036, 0.002, 0.035), offset=(0.0, 0.056, 0.075),
+                  color=(0.96, 0.84, 0.15), color2=(0.85, 0.15, 0.12), pattern="stripes",
+                  texture_freq=160.0, texture_amp=0.08, roughness=0.85),
     ]
 
 
@@ -213,21 +115,14 @@ def cereal_box() -> List[Primitive]:
 
 def make_floor(
     size: Tuple[float, float, float] = (1.00, 0.80, 0.02),
-    color: Tuple[float, float, float] = (0.72, 0.73, 0.75), # Light industrial workshop floor
+    color: Tuple[float, float, float] = (0.70, 0.71, 0.72),
 ) -> SceneObject:
-    """Large floor plane at z=0."""
+    """Tiled concrete-look floor; top surface at z = 0 (``size`` = half-extents)."""
     return SceneObject(
         name="floor",
-        prims=[
-            Primitive(
-                BOX,
-                scale=size,
-                offset=(0.0, 0.0, -size[2]),
-                color=color,
-                texture_freq=14.0,
-                texture_amp=0.08,
-            )
-        ],
+        prims=[Primitive(BOX, scale=size, offset=(0.0, 0.0, -size[2]), color=color,
+                         color2=(0.50, 0.50, 0.51), pattern="tiles", texture_freq=6.0,
+                         texture_amp=0.10, roughness=0.75)],
         position=(0.0, 0.0, 0.0),
         movable=False,
         obj_id=0,
@@ -238,49 +133,23 @@ def make_small_table(
     position: Tuple[float, float, float] = (0.18, 0.12, 0.0),
     top_size: Tuple[float, float, float] = (0.20, 0.16, 0.012),
     height: float = 0.060,
-    wood_color: Tuple[float, float, float] = (0.34, 0.22, 0.16), # Walnut wood surface
-    leg_color: Tuple[float, float, float] = (0.22, 0.23, 0.25),  # Gunmetal steel legs
+    wood_color: Tuple[float, float, float] = (0.42, 0.27, 0.16),
+    leg_color: Tuple[float, float, float] = (0.30, 0.31, 0.33),
 ) -> SceneObject:
-    """Low staging table placed on the floor."""
-    prims = []
+    """Low walnut staging table. ``top_size`` are HALF-extents; the top surface
+    is exactly at z = ``height`` (objects are placed there)."""
     w, l, th = top_size
-    leg_r = 0.008
-    leg_h = height - th
-
-    # Tabletop board
-    prims.append(
-        Primitive(
-            BOX,
-            scale=(w, l, th),
-            offset=(0.0, 0.0, height - th / 2.0),
-            color=wood_color,
-            texture_freq=20.0,
-            texture_amp=0.12,
-        )
-    )
-
-    # 4 Steel legs
-    dx, dy = (w / 2.0) - 0.020, (l / 2.0) - 0.020
+    prims = [Primitive(BOX, scale=(w, l, th), offset=(0.0, 0.0, height - th), color=wood_color,
+                       color2=(0.26, 0.15, 0.08), pattern="wood", texture_freq=40.0,
+                       texture_amp=0.10, roughness=0.45)]
+    leg_r, leg_half = 0.008, (height - 2.0 * th) / 2.0
+    dx, dy = w - 0.020, l - 0.020
     for lx in (-dx, dx):
         for ly in (-dy, dy):
-            prims.append(
-                Primitive(
-                    CYLINDER,
-                    scale=(leg_r, leg_r, leg_h / 2.0),
-                    offset=(lx, ly, leg_h / 2.0),
-                    color=leg_color,
-                    texture_freq=40.0,
-                    texture_amp=0.04,
-                )
-            )
-
-    return SceneObject(
-        name="small_table",
-        prims=prims,
-        position=position,
-        movable=False,
-        obj_id=9,
-    )
+            prims.append(Primitive(CYLINDER, scale=(leg_r, leg_r, leg_half), offset=(lx, ly, leg_half),
+                                   color=leg_color, pattern="brushed", texture_freq=300.0,
+                                   texture_amp=0.08, roughness=0.35, metallic=0.7))
+    return SceneObject(name="small_table", prims=prims, position=position, movable=False, obj_id=9)
 
 
 # --------------------------------------------------------------------------- #
@@ -372,18 +241,15 @@ def build_robot_arm_primitives(
 # --------------------------------------------------------------------------- #
 
 def build_pick_place_scene() -> List[SceneObject]:
-    """Constructs the base floor, low table, and 5 household objects resting on the floor."""
+    """Floor, low table (top x in [-0.02, 0.38], y in [-0.04, 0.28], z = 0.06)
+    and five household objects on the floor, each >= 2 cm clear of the table
+    footprint and of each other."""
     return [
         make_floor(),
         make_small_table(position=(0.18, 0.12, 0.0), top_size=(0.20, 0.16, 0.012), height=0.060),
-        # Target Object to be picked: Red Ceramic Coffee Mug
-        SceneObject(name="ceramic_mug", prims=ceramic_coffee_mug(), position=(-0.08, -0.06, 0.0), yaw=0.0, obj_id=1),
-        # Distractor 1: Yellow Mustard Bottle
-        SceneObject(name="mustard_bottle", prims=mustard_squeeze_bottle(), position=(-0.16, 0.06, 0.0), yaw=-0.15, obj_id=2),
-        # Distractor 2: Campbell's Tomato Soup Can
-        SceneObject(name="soup_can", prims=tomato_soup_can(), position=(-0.02, 0.14, 0.0), yaw=0.0, obj_id=3),
-        # Distractor 3: Fresh Red Apple
+        SceneObject(name="ceramic_mug", prims=ceramic_coffee_mug(), position=(-0.10, -0.08, 0.0), yaw=0.0, obj_id=1),
+        SceneObject(name="mustard_bottle", prims=mustard_squeeze_bottle(), position=(-0.18, 0.07, 0.0), yaw=-0.15, obj_id=2),
+        SceneObject(name="soup_can", prims=tomato_soup_can(), position=(-0.11, 0.20, 0.0), yaw=0.0, obj_id=3),
         SceneObject(name="red_apple", prims=red_apple(), position=(0.06, -0.14, 0.0), yaw=0.45, obj_id=4),
-        # Distractor 4: Breakfast Cereal Box
-        SceneObject(name="cereal_box", prims=cereal_box(), position=(-0.16, -0.18, 0.0), yaw=-0.30, obj_id=5),
+        SceneObject(name="cereal_box", prims=cereal_box(), position=(-0.17, -0.19, 0.0), yaw=-0.30, obj_id=5),
     ]

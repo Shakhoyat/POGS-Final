@@ -23,7 +23,7 @@ from common.config import POGSConfig
 from common.encoders import DinoExtractor, OpenCLIPNetwork
 from common.evaluate import (
     TrackingResult, adds_metric, adds_success_rate, object_diameter, object_model_points,
-    static_baseline, track_sequence, variant_config,
+    static_baseline, track_realtime, track_sequence, variant_config,
 )
 from common.grouping import (
     ObjectGroups, assign_gt_ids, build_object_groups, cluster_purity, cluster_scene,
@@ -32,7 +32,7 @@ from common.grouping import (
 from common.model import POGSModel
 from common.trainer import evaluate_views, precompute_features, train_pogs
 from scene_generator.pick_place_benchmark import (
-    FACTORS, OBJECT_NAMES, OBJECT_QUERIES, Case, load_capture, load_case,
+    FACTORS, OBJECT_NAMES, OBJECT_QUERIES, REALTIME_FPS, SCENE_VERSION, Case, dataset_scene_version, load_capture, load_case,
 )
 
 DATASET_DIR = "datasets/synthetic_scenes/pick_place_floor_table"
@@ -76,13 +76,20 @@ def train_or_load(
     the one the model was distilled with."""
     capture = load_capture(dataset_dir, device=cfg.runtime.device)
     dino, clip = load_encoders(cfg)
+    version = dataset_scene_version(dataset_dir)
 
     if checkpoint_exists(ckpt_dir) and not force_train:
-        model, pca, _ = load_checkpoint(ckpt_dir, cfg, device=cfg.runtime.device)
-        dino.set_pca(pca)
-        if verbose:
-            print(f"[train] loaded checkpoint from {ckpt_dir}: {model.num_points} gaussians, step {model.step}")
-        return model, capture, dino, clip
+        model, pca, ck = load_checkpoint(ckpt_dir, cfg, device=cfg.runtime.device)
+        ck_version = ck.get("extra", {}).get("scene_version", 1)
+        if ck_version == version:
+            dino.set_pca(pca)
+            if verbose:
+                print(f"[train] loaded checkpoint from {ckpt_dir}: {model.num_points} gaussians, step {model.step}")
+            return model, capture, dino, clip
+        print(f"[train] checkpoint is for scene v{ck_version}, data is v{version}: retraining")
+        labels = os.path.join(ckpt_dir, "cluster_labels.npy")
+        if os.path.exists(labels):
+            os.remove(labels)
 
     if verbose:
         print(f"[train] {len(capture.cameras)} views, {len(capture.seed_points)} seed points")
@@ -96,7 +103,10 @@ def train_or_load(
     train_time = time.time() - t0
     quality = evaluate_views(model, capture, cfg)
     save_checkpoint(ckpt_dir, model, features.dino_pca, cfg,
-                    extra={"train_time_s": train_time, **quality})
+                    extra={"train_time_s": train_time, "scene_version": version, **quality})
+    labels = os.path.join(ckpt_dir, "cluster_labels.npy")
+    if os.path.exists(labels):                       # clusters of the previous model
+        os.remove(labels)
     write_json(os.path.join(ckpt_dir, "train_summary.json"), {
         "n_gaussians": model.num_points, "steps": cfg.train.max_num_iterations,
         "train_time_s": train_time, "backend": model.backend, **quality, "log": log.to_dict(),
@@ -219,8 +229,9 @@ def run_suite(
         for name in names:
             run_dir = os.path.join(runs_dir, case.name, _slug(name))
             row_path = os.path.join(run_dir, "row.json")
-            if skip_existing and os.path.exists(row_path):
-                rows.append(json.load(open(row_path)))
+            cached = _cached_row(row_path) if skip_existing else None
+            if cached is not None:
+                rows.append(cached)
                 continue
             if seq is None:
                 seq = load_case(dataset_dir, case)
@@ -244,7 +255,7 @@ def run_suite(
             write_json(os.path.join(run_dir, "telemetry.json"), res.telemetry())
             np.save(os.path.join(run_dir, "part_deltas.npy"), res.part_deltas)
             row = {"case": case.name, "condition": case.condition, "seed": case.seed, "speed": case.speed,
-                   "depth": case.depth, "method": name, "target": groups.names[tg],
+                   "depth": case.depth, "method": name, "target": groups.names[tg], "scene_version": SCENE_VERSION,
                    "n_frames": len(seq.frames), **_prefix(res.summary(tg), "")}
             row["lost_rate"] = lost_rate(res.trans_err_cm[:, tg])
             if mp is not None and tg in mp:
@@ -264,6 +275,147 @@ def run_suite(
     return df
 
 
+# --------------------------------------------------------------------------- #
+# Real-time protocol suite
+# --------------------------------------------------------------------------- #
+
+LATENCY_COMP = " + latency comp."
+"""Suffix of the second row a motion-prior method yields under the real-time
+protocol: its estimate moved forward to 'now' with the filter's velocity."""
+
+REALTIME_COLS = [
+    ("adds_success", "ADD-S success (now)", "{:.0%}"),
+    ("lost_rate", "Lost (now)", "{:.0%}"),
+    ("median_pos_err_cm", "Median pos (cm, now)", "{:.2f}"),
+    ("mean_rot_err_deg", "Rot err (deg, now)", "{:.1f}"),
+    ("proc_adds_success", "ADD-S success (tracked frames)", "{:.0%}"),
+    ("latency_ms", "Latency (ms)", "{:.0f}"),
+    ("tracker_hz", "Tracker Hz", "{:.1f}"),
+    ("frames_skipped_mean", "Frames skipped", "{:.1f}"),
+    ("estimate_age_ms", "Estimate age (ms)", "{:.0f}"),
+]
+
+
+def run_realtime_suite(
+    model: POGSModel,
+    grouping: GroupingResult,
+    dino: DinoExtractor,
+    cfg: POGSConfig,
+    cases: Sequence[Case],
+    methods: Sequence[MethodSpec],
+    out_dir: str,
+    dataset_dir: str = DATASET_DIR,
+    runs_dir: str = RUNS_DIR,
+    include_static_baseline: bool = True,
+    skip_existing: bool = True,
+    latency_fn=None,
+    verbose: bool = True,
+) -> pd.DataFrame:
+    """``run_suite`` for real-time cases (``Case.realtime``): every method runs
+    under ``evaluate.track_realtime`` and is scored at every camera frame on
+    the pose it had published by then ("now"). Each run dir also stores
+    ``schedule.json`` (which frames were tracked, when) for the videos.
+    A method with a motion prior adds a ``<name> + latency comp.`` row from
+    the same run. Target-only protocol, as in ``run_suite``."""
+    os.makedirs(out_dir, exist_ok=True)
+    all_groups, all_g2gt = grouping.groups, grouping.group_to_gt
+    mp_all = object_model_points(all_groups, model)
+    rows = []
+    for ci, case in enumerate(cases):
+        assert case.realtime, f"{case.name} is not a real-time case"
+        seq = groups = g2gt = mp = None
+        jobs = (["Static (no motion)"] if include_static_baseline else []) + [m.name for m in methods]
+        for name in jobs:
+            m = next((m for m in methods if m.name == name), None)
+            out_names = [name] + ([name + LATENCY_COMP] if m is not None and m.motion_prior is not None else [])
+            row_paths = [os.path.join(runs_dir, case.name, _slug(n), "row.json") for n in out_names]
+            cached = [_cached_row(p) for p in row_paths] if skip_existing else [None]
+            if all(c is not None for c in cached):
+                rows += cached
+                continue
+            if seq is None:
+                seq = load_case(dataset_dir, case)
+                _, moving, _ = _case_groups(seq, all_groups, all_g2gt)
+                groups = subset_groups(all_groups, moving)
+                g2gt = {i: all_g2gt[g] for i, g in enumerate(moving)}
+                mp = {i: mp_all[g] for i, g in enumerate(moving)}
+            base = {"case": case.name, "condition": case.condition, "seed": case.seed, "speed": case.speed,
+                    "depth": case.depth, "target": groups.names[0], "n_frames": len(seq.frames),
+                    "scene_version": SCENE_VERSION}
+            if m is None:
+                res = static_baseline(groups, seq, g2gt, mp)
+                outs = [(name, res, None, None)]
+            else:
+                if verbose:
+                    print(f"\n=== [{ci + 1}/{len(cases)}] {case.name} :: {m.name} (real-time) ===")
+                tc = variant_config(cfg.tracking, m.variant)
+                prior = m.motion_prior(groups.num_groups, 1.0 / seq.fps) if m.motion_prior is not None else None
+                rt = track_realtime(model, groups, seq, dino, cfg, g2gt, name=m.name, tracking_cfg=tc,
+                                    model_points=mp, motion_prior=prior, latency_fn=latency_fn, verbose=verbose)
+                outs = [(name, rt.now, rt.processed, rt)]
+                if rt.now_extrap is not None:
+                    outs.append((name + LATENCY_COMP, rt.now_extrap, rt.processed, rt))
+            for n, res, proc, rt in outs:
+                run_dir = os.path.join(runs_dir, case.name, _slug(n))
+                os.makedirs(run_dir, exist_ok=True)
+                write_json(os.path.join(run_dir, "telemetry.json"), res.telemetry())
+                np.save(os.path.join(run_dir, "part_deltas.npy"), res.part_deltas)
+                row = {**base, "method": n, **_prefix(res.summary(0), "")}
+                row["lost_rate"] = lost_rate(res.trans_err_cm[:, 0])
+                row["adds_success"] = adds_success_rate(res.adds[:, 0], object_diameter(mp[0]))
+                if rt is not None:
+                    write_json(os.path.join(run_dir, "schedule.json"), rt.schedule())
+                    row["proc_adds_success"] = adds_success_rate(proc.adds[:, 0], object_diameter(mp[0]))
+                    row["proc_mean_pos_err_cm"] = float(np.nanmean(proc.trans_err_cm[:, 0]))
+                    row["n_tracked"] = int(len(rt.proc_frames))
+                write_json(os.path.join(run_dir, "row.json"), row)
+                rows.append(row)
+        pd.DataFrame(rows).to_csv(os.path.join(out_dir, "summary.csv"), index=False)
+    df = pd.DataFrame(rows)
+    write_realtime_tables(df, out_dir)
+    return df
+
+
+def write_realtime_tables(df: pd.DataFrame, out_dir: str) -> None:
+    """``summary.md``: one table per (condition, playback speed), mean ± std
+    over seeds, then the mean over all real-time cases."""
+    df.to_csv(os.path.join(out_dir, "summary.csv"), index=False)
+    methods = list(dict.fromkeys(df["method"]))
+    cols = [c for c in REALTIME_COLS if c[0] in df]
+    head = "| Method | " + " | ".join(h for _, h, _ in cols) + " |"
+    sep = "|---|" + "---:|" * len(cols)
+    lines = ["# Real-time tracking results", "",
+             f"Camera stream at {REALTIME_FPS:.0f} Hz of scene time; at Nx playback the frames arrive N times "
+             "faster (2x = 60 frames/s of wall time), so the objects move N times further per tracker step. "
+             "The tracker always takes the newest frame "
+             "once it is free; 'now' columns score, at EVERY camera frame, the pose the tracker had published "
+             "by then. Latency is the measured compute time per tracked frame on this machine. "
+             f"{df['seed'].nunique()} seed(s); mean ± std over seeds.", ""]
+    for (cond, speed), sub in df.groupby(["condition", "speed"], sort=False):
+        lines += [f"## {cond}, {speed}x playback speed", "", head, sep]
+        for m in methods:
+            r = sub[sub["method"] == m]
+            if not r.empty:
+                lines.append(f"| {m} | " + " | ".join(_fmt(r[k], k, f) for k, _, f in cols) + " |")
+        lines.append("")
+    lines += ["## all real-time cases", "", "| Method | Cases | " + " | ".join(h for _, h, _ in cols) + " |",
+              "|---|---:|" + "---:|" * len(cols)]
+    for m in methods:
+        r = df[df["method"] == m]
+        lines.append(f"| {m} | {len(r)} | " + " | ".join(
+            (f.format(r[k].mean()) if r[k].notna().any() else "-") for k, _, f in cols) + " |")
+    with open(os.path.join(out_dir, "summary.md"), "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
+def _cached_row(path: str) -> Optional[Dict]:
+    """A finished run's row, if it was produced on the current scene version."""
+    if not os.path.exists(path):
+        return None
+    row = json.load(open(path))
+    return row if row.get("scene_version", 1) == SCENE_VERSION else None
+
+
 LOST_CM = 10.0
 """A frame counts as 'lost' when the position error exceeds this."""
 
@@ -280,6 +432,8 @@ def rescore_runs(model: POGSModel, grouping: GroupingResult, runs_dir: str = RUN
     mp = object_model_points(groups, model)
     by_name = {groups.names[g]: g for g in range(groups.num_groups)}
     n = 0
+    if not os.path.isdir(runs_dir):
+        return 0
     for case in sorted(os.listdir(runs_dir)):
         for meth in sorted(os.listdir(os.path.join(runs_dir, case))):
             d = os.path.join(runs_dir, case, meth)
@@ -342,7 +496,8 @@ TABLE_COLS = [
 ]
 """Per-factor tables: mean over seeds, with the seed standard deviation for the
 main accuracy columns."""
-_WITH_STD = {"success_rate", "adds_success", "lost_rate", "mean_pos_err_cm", "mean_rot_err_deg"}
+_WITH_STD = {"success_rate", "adds_success", "lost_rate", "mean_pos_err_cm", "mean_rot_err_deg",
+             "proc_adds_success", "latency_ms"}
 
 
 def _fmt(vals: pd.Series, key: str, fmt: str) -> str:
@@ -352,7 +507,8 @@ def _fmt(vals: pd.Series, key: str, fmt: str) -> str:
     m = fmt.format(v.mean())
     if key in _WITH_STD and len(v) > 1:
         sd = v.std(ddof=1)
-        m += " ± " + (f"{sd:.0%}" if key in ("success_rate", "adds_success", "lost_rate") else f"{sd:.2f}")
+        m += " ± " + (f"{sd:.0%}" if key in ("success_rate", "adds_success", "lost_rate", "proc_adds_success")
+                      else f"{sd:.0f}" if key == "latency_ms" else f"{sd:.2f}")
     return m
 
 

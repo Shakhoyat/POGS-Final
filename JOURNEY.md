@@ -70,6 +70,28 @@ What was rebuilt (details in `Claude.md`):
   tilt dominates rotation), so tables lead with ADD-S < 0.1 d success and a
   lost-frame rate (>10 cm). Results: RESULTS.md.
 
+## 0c. Scene v2, real-time protocol, full re-run (2026-11-10)
+
+- Scene v2: procedural materials (wood, tiles, labels, glaze, brushed metal)
+  evaluated in each primitive's own frame, so textures move with the objects
+  (v1 used world coordinates: objects slid under a fixed pattern). Roughness /
+  metallic specular. Re-laid-out objects with a test that keeps every footprint
+  >= 2 cm from the table and from each other. Training: 332k Gaussians, PSNR
+  34.1 dB (v1: 31.3), depth MAE 0.6 cm (v1: 2.6).
+- Grouping fix for v2 (robust quantile footprint, background threshold 0.98):
+  all five objects selected.
+- Real-time protocol: 30 Hz renders of the same trajectories; the tracker takes
+  the newest frame when free using its measured latency and is scored at every
+  camera frame. The Kalman filter supports variable dt and extrapolates its
+  estimate to "now" (latency compensation).
+- Dashboard videos: camera + boxes, splat overlay, raw full-scene and raw object
+  splats, live latency / tracker rate / estimate age.
+- Results (RESULTS.md): base POGS runs at 1.9 Hz and is right on only 56% of
+  30 Hz camera frames; running fewer iterations (or KF + latency compensation)
+  restores 100% at 1x. Offline, KF + check is the best method overall (75% vs
+  71%) with clear wins at 2x speed and on the cereal box, but the plain KF is
+  unsafe with a weak optimiser, and hand occlusion remains unsolved.
+
 ## Historical log (pre-audit; results invalid)
 
 ## 1. Project Overview & Target Objectives

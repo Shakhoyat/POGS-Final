@@ -41,6 +41,15 @@ at load time.
 ``FACTORS`` lists, per factor, the (level, condition, speed, depth) cases a
 results table compares; ``benchmark_cases()`` expands them over seeds.
 
+Real-time sequences (``<condition>_s<seed>_30hz``)
+-------------------------------------------------
+The same trajectories rendered at a 30 Hz camera rate (``REALTIME_FPS``;
+frame 6k of the 30 Hz sequence is frame k of the 5 Hz one). They feed the
+real-time protocol (``evaluate.track_realtime``): the tracker always takes the
+newest camera frame once it is free, so a slow tracker skips frames and its
+output goes stale. ``Case(realtime=True, speed=k)`` plays the stream k times
+faster (timestamps / k) -- no extra rendering.
+
 Ground-truth convention: ``gt_deltas[obj]`` is the world-frame rigid motion
 applied to the object's geometry (x' = R x + t), identical to what
 ``FlatScene.clone_with_transforms`` renders.
@@ -72,6 +81,11 @@ FLOOR_ID, TABLE_ID = 0, 9
 GRIPPER_ID, GRIPPER2_ID, HAND_ID = 99, 98, 97
 OCCLUDER_IDS = (GRIPPER_ID, GRIPPER2_ID, HAND_ID)
 TABLE_TOP_Z = 0.060
+SCENE_VERSION = 2
+"""Bumped whenever the rendered scene changes. Stored in the capture and in
+every sequence; checkpoints and cached runs from another version are not
+reused. v2: object-local textures + materials, table top at TABLE_TOP_Z,
+soup can and mug moved clear of the table."""
 OBJECT_NAMES = {1: "ceramic_mug", 2: "mustard_bottle", 3: "soup_can", 4: "red_apple", 5: "cereal_box"}
 OBJECT_QUERIES = {1: "coffee mug", 2: "mustard bottle", 3: "soup can", 4: "apple", 5: "cereal box"}
 TARGETS: Dict[str, int] = {"mug": 1, "mustard": 2, "soup": 3, "cereal": 5}
@@ -140,21 +154,30 @@ FACTORS: Dict[str, List[Tuple[str, str, int, str]]] = {
 }
 
 
+REALTIME_FPS = 30.0
+REALTIME_SUFFIX = "_30hz"
+REALTIME_CONDITIONS: Tuple[str, ...] = ("base",)
+REALTIME_SPEEDS: Tuple[int, ...] = (1, 2)
+
+
 @dataclass(frozen=True)
 class Case:
-    """One tracking run: a rendered sequence plus load-time settings."""
+    """One tracking run: a rendered sequence plus load-time settings.
+    ``realtime``: the 30 Hz rendering, tracked under the real-time protocol;
+    ``speed`` then scales playback time instead of striding frames."""
     condition: str
     seed: int
     speed: int = 1
     depth: str = "stereo"
+    realtime: bool = False
 
     @property
     def sequence(self) -> str:
-        return f"{self.condition}_s{self.seed}"
+        return f"{self.condition}_s{self.seed}" + (REALTIME_SUFFIX if self.realtime else "")
 
     @property
     def name(self) -> str:
-        return f"{self.sequence}__{self.speed}x_{self.depth}"
+        return f"{self.sequence}__{'rt' if self.realtime else ''}{self.speed}x_{self.depth}"
 
 
 def benchmark_cases(factors: Optional[Sequence[str]] = None, seeds: Optional[Sequence[int]] = None) -> List[Case]:
@@ -170,9 +193,25 @@ def benchmark_cases(factors: Optional[Sequence[str]] = None, seeds: Optional[Seq
     return out
 
 
-def rendered_sequences(seeds: Optional[Sequence[int]] = None) -> List[str]:
+def realtime_cases(seeds: Optional[Sequence[int]] = None, conditions: Sequence[str] = REALTIME_CONDITIONS,
+                   speeds: Sequence[int] = REALTIME_SPEEDS, depth: str = "stereo") -> List[Case]:
     seeds = list(range(N_SEEDS)) if seeds is None else list(seeds)
+    return [Case(c, s, k, depth, realtime=True) for c in conditions for k in speeds for s in seeds]
+
+
+def rendered_sequences(seeds: Optional[Sequence[int]] = None, realtime: bool = False) -> List[str]:
+    """Offline sequences, or with ``realtime`` the 30 Hz ones."""
+    seeds = list(range(N_SEEDS)) if seeds is None else list(seeds)
+    if realtime:
+        return [f"{c}_s{s}{REALTIME_SUFFIX}" for c in REALTIME_CONDITIONS for s in seeds]
     return [f"{c}_s{s}" for c in CONDITIONS for s in seeds]
+
+
+def realtime_config(cfg: "BenchmarkConfig", fps: float = REALTIME_FPS) -> "BenchmarkConfig":
+    """Same trajectories, denser sampling: (n - 1) * k + 1 frames at k x fps."""
+    import dataclasses
+    k = int(round(fps / cfg.fps))
+    return dataclasses.replace(cfg, fps=cfg.fps * k, n_frames=(cfg.n_frames - 1) * k + 1)
 
 
 @dataclass
@@ -446,17 +485,22 @@ def generate_capture(out_dir: str, cfg: BenchmarkConfig, device: str = "cuda:0",
                     "cy": c.cy, "width": c.width, "height": c.height} for i, c in enumerate(cams)], f, indent=1)
     counts = {int(k): int((ids == k).sum()) for k in np.unique(ids)}
     with open(os.path.join(capture_dir, "capture_metadata.json"), "w") as f:
-        json.dump({"n_views": cfg.n_views, "seed_points_per_object": counts,
+        json.dump({"scene_version": SCENE_VERSION, "n_views": cfg.n_views, "seed_points_per_object": counts,
                    "object_names": OBJECT_NAMES, "depth_noise_m_at_0.7m": cfg.depth_noise}, f, indent=1)
     if verbose:
         print(f"[capture] {cfg.n_views} views in {time.time() - t0:.1f}s; seed points per id: {counts}")
 
 
 def generate_sequence(out_dir: str, condition: str, seed: int, cfg: BenchmarkConfig,
-                      device: str = "cuda:0", verbose: bool = True) -> str:
+                      device: str = "cuda:0", verbose: bool = True, suffix: str = "",
+                      frames: Optional[Sequence[int]] = None) -> str:
+    """Renders ``<condition>_s<seed><suffix>``. The trajectory depends only on
+    (condition, seed), so a ``suffix``-ed re-rendering at another frame rate
+    shows the same motion. ``frames`` renders only those frame indices
+    (previews)."""
     cond = CONDITIONS[condition]
-    name = f"{condition}_s{seed}"
-    rng = np.random.default_rng(zlib.crc32(name.encode()))
+    rng = np.random.default_rng(zlib.crc32(f"{condition}_s{seed}".encode()))
+    name = f"{condition}_s{seed}{suffix}"
     objects = build_pick_place_scene()
     cam = tracking_camera(cfg, device)
     eye = np.array(cfg.track_eye)
@@ -481,7 +525,7 @@ def generate_sequence(out_dir: str, condition: str, seed: int, cfg: BenchmarkCon
     movable_ids = [o.obj_id for o in objects if o.obj_id not in (FLOOR_ID, TABLE_ID)]
     frames_meta, previews = [], []
     t0 = time.time()
-    for f in range(cfg.n_frames):
+    for f in (range(cfg.n_frames) if frames is None else frames):
         obj_deltas = {oid: plans[i][f]["delta"] for i, (oid, _, _) in enumerate(movers)}
         objs, deltas = list(objects), dict(obj_deltas)
         if cond.occlusion in ("gripper", "hand"):
@@ -520,7 +564,8 @@ def generate_sequence(out_dir: str, condition: str, seed: int, cfg: BenchmarkCon
         })
         previews.append(_annotate(rgb, f, cfg, p0, occl[tgt], name))
     meta = {
-        "name": name, "condition": condition, "seed": seed, "condition_spec": cond.__dict__,
+        "name": name, "scene_version": SCENE_VERSION, "condition": condition, "seed": seed,
+        "condition_spec": cond.__dict__,
         "target_object_id": tgt, "target_object": OBJECT_NAMES[tgt],
         "moving_object_ids": [oid for oid, _, _ in movers],
         "trajectories": [{"obj_id": oid, **prm.__dict__} for oid, prm, _ in movers],
@@ -535,13 +580,14 @@ def generate_sequence(out_dir: str, condition: str, seed: int, cfg: BenchmarkCon
     try:
         import imageio.v2 as imageio
 
-        imageio.mimsave(os.path.join(sc_dir, "preview.mp4"), [im[: im.shape[0] // 2 * 2, : im.shape[1] // 2 * 2]
-                                                              for im in previews], fps=cfg.fps)
+        if frames is None:
+            imageio.mimsave(os.path.join(sc_dir, "preview.mp4"), [im[: im.shape[0] // 2 * 2, : im.shape[1] // 2 * 2]
+                                                                  for im in previews], fps=cfg.fps)
     except Exception as exc:  # noqa: BLE001
         print(f"  (preview video skipped: {exc})")
     if verbose:
         oc = [m["occlusion_frac"] for m in frames_meta]
-        print(f"[track] {name}: {cfg.n_frames} frames in {time.time() - t0:.1f}s, "
+        print(f"[track] {name}: {len(frames_meta)} frames in {time.time() - t0:.1f}s, "
               f"max target occlusion {max(oc):.0%}, max rotation {max(m['rot_deg'] for m in frames_meta):.0f} deg")
     return sc_dir
 
@@ -562,25 +608,46 @@ def generate_benchmark(
     device: str = "cuda:0",
     capture: Optional[bool] = None,
     overwrite: bool = False,
+    realtime: bool = False,
 ) -> str:
     """Renders the capture (if missing or ``capture=True``) and every sequence
-    that is not on disk yet (all of ``rendered_sequences()`` by default)."""
+    that is not on disk yet (all of ``rendered_sequences(realtime=...)`` by
+    default; names ending in ``REALTIME_SUFFIX`` render at ``REALTIME_FPS``)."""
     cfg = cfg or BenchmarkConfig()
     os.makedirs(out_dir, exist_ok=True)
     have_capture = os.path.exists(os.path.join(out_dir, "capture", "images.npy"))
-    if capture or (capture is None and not have_capture):
+    stale = have_capture and dataset_scene_version(out_dir) != SCENE_VERSION
+    if stale:
+        print(f"[data] capture is scene v{dataset_scene_version(out_dir)}, code is v{SCENE_VERSION}: "
+              "re-rendering everything")
+    if capture or stale or (capture is None and not have_capture):
         generate_capture(out_dir, cfg, device)
-    for name in (sequences or rendered_sequences()):
-        if not overwrite and os.path.exists(os.path.join(out_dir, name, "tracking_metadata.json")):
-            continue
-        cond, seed = name.rsplit("_s", 1)
-        generate_sequence(out_dir, cond, int(seed), cfg, device)
+    for name in (sequences or rendered_sequences(realtime=realtime)):
+        meta_p = os.path.join(out_dir, name, "tracking_metadata.json")
+        if not overwrite and os.path.exists(meta_p):
+            with open(meta_p) as f:
+                if json.load(f).get("scene_version", 1) == SCENE_VERSION:
+                    continue
+        rt = name.endswith(REALTIME_SUFFIX)
+        base = name[: -len(REALTIME_SUFFIX)] if rt else name
+        cond, seed = base.rsplit("_s", 1)
+        generate_sequence(out_dir, cond, int(seed), realtime_config(cfg) if rt else cfg, device,
+                          suffix=REALTIME_SUFFIX if rt else "")
     return out_dir
 
 
 # --------------------------------------------------------------------------- #
 # Loading
 # --------------------------------------------------------------------------- #
+
+
+def dataset_scene_version(dataset_dir: str) -> int:
+    """Scene version of the capture on disk (1 = before versioning)."""
+    p = os.path.join(dataset_dir, "capture", "capture_metadata.json")
+    if not os.path.exists(p):
+        return 0
+    with open(p) as f:
+        return int(json.load(f).get("scene_version", 1))
 
 
 def _read_ply(path: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -644,14 +711,51 @@ class BenchmarkSequence:
     meta: Dict = field(default_factory=dict)
 
 
+class LazyFrame:
+    """A ``BenchmarkFrame`` whose images are read from disk on every access
+    (never cached), so a long 30 Hz sequence costs only its metadata in RAM."""
+
+    def __init__(self, sdir: str, name: str, fm: Dict, depth: str, time_scale: float = 1.0):
+        self._sdir, self._name, self._depth = sdir, name, depth
+        self._file = f"frame_{fm['frame']:04d}.png"
+        self.frame_idx = fm["frame"]
+        self.timestamp_sec = fm["timestamp_sec"] / time_scale
+        self.gt_delta = {int(k): np.array(v, dtype=np.float64) for k, v in fm["gt_deltas"].items()}
+        self.phase, self.rot_deg, self.occlusion_frac = fm["phase"], fm["rot_deg"], fm["occlusion_frac"]
+
+    @property
+    def occluded(self) -> bool:
+        return self.occlusion_frac > 0.05
+
+    @property
+    def rgb(self) -> torch.Tensor:
+        im = cv2.cvtColor(cv2.imread(os.path.join(self._sdir, "rgb", self._file)), cv2.COLOR_BGR2RGB)
+        return torch.from_numpy(im).float() / 255.0
+
+    @property
+    def depth(self) -> torch.Tensor:
+        d = cv2.imread(os.path.join(self._sdir, "depth_mm", self._file), cv2.IMREAD_UNCHANGED).astype(np.float32) / 1000.0
+        return torch.from_numpy(degrade_depth(d, self._depth, f"{self._name}/{self.frame_idx}/{self._depth}"))
+
+    @property
+    def obj_id(self) -> torch.Tensor:
+        m = cv2.imread(os.path.join(self._sdir, "masks", self._file), cv2.IMREAD_UNCHANGED).astype(np.int64)
+        return torch.from_numpy(m)
+
+
 def load_case(dataset_dir: str, case: Case, device: str = "cpu") -> BenchmarkSequence:
+    if case.realtime:
+        return load_sequence(dataset_dir, case.sequence, depth=case.depth, device=device,
+                             lazy=True, time_scale=float(case.speed))
     return load_sequence(dataset_dir, case.sequence, speed=case.speed, depth=case.depth, device=device)
 
 
 def load_sequence(dataset_dir: str, name: str, speed: int = 1, depth: str = "stereo",
-                  device: str = "cpu") -> BenchmarkSequence:
+                  device: str = "cpu", lazy: bool = False, time_scale: float = 1.0) -> BenchmarkSequence:
     """Loads every ``speed``-th frame (the camera rate is unchanged, so ``fps``
-    drops by ``speed``) and degrades depth with profile ``depth``."""
+    drops by ``speed``) and degrades depth with profile ``depth``.
+    ``lazy``: frames read their images on access (``LazyFrame``).
+    ``time_scale``: divide timestamps by it (play the motion k times faster)."""
     sdir = os.path.join(dataset_dir, name)
     with open(os.path.join(sdir, "tracking_metadata.json")) as f:
         meta = json.load(f)
@@ -660,20 +764,17 @@ def load_sequence(dataset_dir: str, name: str, speed: int = 1, depth: str = "ste
                         c["cx"], c["cy"], c["width"], c["height"])
     frames = []
     for fm in meta["frames"][::speed]:
-        n = f"frame_{fm['frame']:04d}.png"
-        rgb = cv2.cvtColor(cv2.imread(os.path.join(sdir, "rgb", n)), cv2.COLOR_BGR2RGB)
-        d = cv2.imread(os.path.join(sdir, "depth_mm", n), cv2.IMREAD_UNCHANGED).astype(np.float32) / 1000.0
-        d = degrade_depth(d, depth, f"{name}/{fm['frame']}/{depth}")
-        mask = cv2.imread(os.path.join(sdir, "masks", n), cv2.IMREAD_UNCHANGED).astype(np.int64)
+        lf = LazyFrame(sdir, name, fm, depth, time_scale)
+        if lazy:
+            frames.append(lf)
+            continue
         frames.append(BenchmarkFrame(
-            frame_idx=fm["frame"], timestamp_sec=fm["timestamp_sec"],
-            rgb=torch.from_numpy(rgb).float() / 255.0, depth=torch.from_numpy(d),
-            obj_id=torch.from_numpy(mask),
-            gt_delta={int(k): np.array(v, dtype=np.float64) for k, v in fm["gt_deltas"].items()},
-            phase=fm["phase"], rot_deg=fm["rot_deg"], occlusion_frac=fm["occlusion_frac"],
+            frame_idx=lf.frame_idx, timestamp_sec=lf.timestamp_sec, rgb=lf.rgb, depth=lf.depth,
+            obj_id=lf.obj_id, gt_delta=lf.gt_delta, phase=lf.phase, rot_deg=lf.rot_deg,
+            occlusion_frac=lf.occlusion_frac,
         ))
     return BenchmarkSequence(
         name=name, target_obj_id=meta["target_object_id"], frames=frames, camera=cam,
-        fps=meta["fps"] / speed, condition=meta["condition"], seed=meta["seed"], speed=speed,
+        fps=meta["fps"] * time_scale / speed, condition=meta["condition"], seed=meta["seed"], speed=speed,
         depth_profile=depth, moving_obj_ids=meta["moving_object_ids"], meta=meta,
     )

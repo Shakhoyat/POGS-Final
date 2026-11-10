@@ -17,13 +17,19 @@ common/            POGS library: config (release defaults), model, gsplat/torch
                    HDBSCAN grouping, rigid-group tracker, SE(3) Kalman filter,
                    checkpoints, the shared tracking loop + metrics
 scene_generator/   synthetic scenes; pick_place_benchmark.py builds the benchmark
-                   (12 conditions x 3 seeds, + speed / depth-noise at load time)
+                   (12 conditions x 3 seeds, + speed / depth-noise at load time,
+                   + 30 Hz renderings for the real-time protocol);
+                   materials.py: object-local procedural textures;
+                   preview_scene.py: contact sheet to review the scene (CPU ok)
 experiments/
   pipeline.py      train -> group -> track -> report (shared by all versions)
-  visuals.py       dashboard videos
+  visuals.py       dashboard videos (camera | overlay | raw scene splats | raw
+                   object splats, with a compute-time / latency overlay)
   v1_base_pogs/    base POGS (paper and release settings) + the paper's ablations
   v2_kalman_pogs/  v1 + constant-velocity SE(3) Kalman motion prior (+ iteration sweep)
   v3_scene_mustard/ object and multi-object factors (folder name kept for history)
+  realtime/        real-time protocol: 30 Hz camera, the tracker skips frames it
+                   is too slow for and is scored on its published (stale) pose
 tests/             regression tests (pose maths, PCA persistence, metrics, ...)
 tools/             gsplat CUDA setup without sudo
 legacy/            unmaintained notebook-era modules (grasping, servoing, old generator)
@@ -43,11 +49,18 @@ orders of magnitude slower, and densification is only approximate.
 ## Run
 
 ```bash
+.venv/bin/python -m scene_generator.preview_scene         # optional: review the scene first (CPU, ~25 s)
 .venv/bin/python -m experiments.v1_base_pogs.run_all      # data (if missing), train, group, track, videos
 .venv/bin/python -m experiments.v2_kalman_pogs.run_all    # reuses the v1 checkpoint and runs
 .venv/bin/python -m experiments.v3_scene_mustard.run_all  # reuses the v1 checkpoint and runs
-# any of them: --factors rotation speed occlusion depth object multi-object
+.venv/bin/python -m experiments.realtime.run_all          # renders the 30 Hz sequences if missing; idle GPU!
+.venv/bin/python -m experiments.results_tables > tables.md  # compact tables used in RESULTS.md (CPU)
+# v1-v3: --factors rotation speed occlusion depth object multi-object
 ```
+
+The scene has a version (`SCENE_VERSION` in `pick_place_benchmark.py`): data,
+checkpoints and cached runs from another version are re-rendered / retrained /
+re-run automatically instead of being mixed with new ones.
 
 Outputs: `model_checkpoints/pick_place_floor_table/` (one self-contained
 checkpoint, including the DINO PCA basis), `data_results/benchmark_runs/` (every

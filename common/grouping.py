@@ -432,7 +432,9 @@ def select_object_clusters(
         m = labels == c
         n = int(m.sum())
         p = means[m]
-        footprint = float((p[:, 0].max() - p[:, 0].min()) * (p[:, 1].max() - p[:, 1].min()))
+        lo = torch.quantile(p[:, :2].float(), 0.05, dim=0)
+        hi = torch.quantile(p[:, :2].float(), 0.95, dim=0)
+        footprint = float((hi - lo).prod())
         share = n / max(total, 1)
         sim = float(bg_sim[m].mean())
         if n < min_n:

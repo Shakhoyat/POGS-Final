@@ -71,6 +71,25 @@ rate (> 10 cm); the paper's 3 cm / 5 deg rule is reported but saturates (~11%)
 because the gripper tilts the held object. `rescore_runs` back-fills new metrics
 into cached rows from their telemetry.
 
+Scene v2 (`SCENE_VERSION = 2`): procedural materials (`scene_generator/materials.py`:
+grain, wood, two-tone labels, printed patches, tiles, brushed metal; roughness /
+metallic drive the specular). Textures are evaluated in each primitive's own frame;
+v1 evaluated them in world coordinates, so a moving object slid under a fixed
+pattern (corrupting the DINO features POGS tracks). v2 also puts the table top
+exactly at `TABLE_TOP_Z` (it was 6 mm higher, so placed objects sank into it) and
+moves the soup can and mug off the table footprint. Data, checkpoints and cached
+runs carry the version and are never mixed across versions.
+
+Real-time protocol (`common.evaluate.track_realtime`, `experiments/realtime/`): the
+same trajectories rendered at 30 Hz. The tracker starts on frame 0 at t = 0 and
+each tracked frame costs its MEASURED compute time; when free it takes the newest
+frame and skips the rest (`pick_next_frame`); the Kalman prior predicts over the
+true gap. Scored at every camera frame on the last finished estimate
+(`estimate_sources`); KF methods also report "+ latency comp." (that estimate
+moved to the current time with the filter velocity). Initialisation is not timed
+(object at rest). Timings depend on the GPU and on anything else running on it:
+run alone, and report the hardware.
+
 Rules: a method name is a key of the shared run cache
 (`data_results/benchmark_runs`), so one name = one configuration. Compare methods
 on the same cases only, and report seed std next to every mean. A speed claim

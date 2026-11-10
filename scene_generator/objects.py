@@ -125,6 +125,8 @@ def make_hand(scale: float = 1.0) -> SceneObject:
                   (-0.035 * s, 0.010 * s, 0.0),
                   rot_euler=(math.pi / 3, -math.pi / 4, 0.0), color=skin)
     )
+    for p in prims:
+        p.pattern, p.texture_freq, p.texture_amp, p.roughness = "noise", 250.0, 0.08, 0.6
     return SceneObject(name="hand", prims=prims, movable=False, obj_id=99)
 
 

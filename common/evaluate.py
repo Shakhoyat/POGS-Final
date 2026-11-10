@@ -26,7 +26,7 @@ import copy
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Protocol, Sequence
+from typing import Callable, Dict, List, Optional, Protocol
 
 import numpy as np
 import torch
@@ -219,7 +219,7 @@ class MotionPrior(Protocol):
     check_loss: bool        # optional; see common.kalman.KalmanMotionPrior
 
     def initialize(self, posevecs: torch.Tensor) -> None: ...
-    def predict(self, device=None) -> torch.Tensor: ...
+    def predict(self, device=None, dt: Optional[float] = None) -> torch.Tensor: ...
     def update(self, posevecs: torch.Tensor, device=None) -> torch.Tensor: ...
 
 
@@ -228,20 +228,23 @@ class MotionPrior(Protocol):
 # --------------------------------------------------------------------------- #
 
 
-def _score_frame(seq, fi, P, groups, group_to_gt, base_centroids, model_points, out):
+def _score_frame(seq, fi, P, groups, group_to_gt, base_centroids, model_points, out, row: Optional[int] = None):
+    """Scores poses ``P`` (K, 4, 4) against GT of frame ``fi`` into ``out[row]``
+    (``row`` defaults to ``fi``)."""
+    r = fi if row is None else row
     for gi in range(groups.num_groups):
         gt_id = group_to_gt.get(gi, -1)
         if gt_id < 0:
             continue
         T_gt = gt_pose_for_group(seq, fi, gt_id, base_centroids[gi])
-        out["preds"][fi, gi], out["gts"][fi, gi] = P[gi], T_gt
-        out["trans"][fi, gi] = translation_error_cm(P[gi], T_gt)
-        out["rot"][fi, gi] = rotation_error_deg(P[gi], T_gt)
-        out["yaw"][fi, gi] = yaw_error_deg(P[gi], T_gt)
+        out["preds"][r, gi], out["gts"][r, gi] = P[gi], T_gt
+        out["trans"][r, gi] = translation_error_cm(P[gi], T_gt)
+        out["rot"][r, gi] = rotation_error_deg(P[gi], T_gt)
+        out["yaw"][r, gi] = yaw_error_deg(P[gi], T_gt)
         pts = model_points.get(gi) if model_points else None
         if pts is not None:
-            out["add"][fi, gi] = add_metric(pts, P[gi], T_gt)
-            out["adds"][fi, gi] = adds_metric(pts, P[gi], T_gt)
+            out["add"][r, gi] = add_metric(pts, P[gi], T_gt)
+            out["adds"][r, gi] = adds_metric(pts, P[gi], T_gt)
 
 
 def _alloc(F_n: int, K: int) -> Dict[str, np.ndarray]:
@@ -272,6 +275,109 @@ def tracking_camera(seq_camera, tcfg: TrackingConfig, device: str):
     return cam.rescale(scale) if scale < 1.0 else cam
 
 
+def _sync() -> None:
+    """Wait for queued GPU work so wall-clock timings are honest (no-op on CPU)."""
+    if torch.cuda.is_available() and torch.cuda.is_initialized():
+        torch.cuda.synchronize()
+
+
+class _FrameTracker:
+    """POGS (+ optional motion prior) on one sequence; ``step`` tracks one
+    frame. Shared by the offline loop and the real-time protocol, so both run
+    exactly the same per-frame computation."""
+
+    def __init__(self, model: POGSModel, groups: ObjectGroups, seq, dino_fn: DinoFn, cfg: POGSConfig,
+                 tcfg: TrackingConfig, motion_prior: Optional["MotionPrior"]):
+        self.model, self.cfg, self.tcfg, self.dino_fn, self.prior = model, cfg, tcfg, dino_fn, motion_prior
+        self.device = cfg.runtime.device
+        raster_kwargs = (
+            dict(max_per_tile=cfg.runtime.torch_raster_max_per_tile, tile_chunk=cfg.runtime.torch_raster_tile_chunk)
+            if model.backend == "torch" else {}
+        )
+        self.snapshot = model.state_snapshot()
+        self.opt = RigidGroupOptimizer(tcfg, model, groups, raster_kwargs=raster_kwargs)
+        self.cam = tracking_camera(seq.camera, tcfg, self.device)
+        self.n_pred_kept = 0
+
+    def make_obs(self, fr):
+        return PosedObservation(fr.rgb.to(self.device), self.cam, self.dino_fn, fr.depth.to(self.device),
+                                self.tcfg.max_roi_resolution)
+
+    def initialize(self, fr) -> Dict[str, float]:
+        t0 = time.time()
+        info = self.opt.initialize_obj_pose(self.make_obs(fr), n_seeds=self.tcfg.init_n_seeds, verbose=False)
+        info = dict(info, init_time=time.time() - t0)
+        if self.prior is not None:
+            self.prior.initialize(self.opt.part_deltas.data)
+        return info
+
+    def step(self, fr, first: bool, dt: Optional[float] = None) -> Dict[str, float]:
+        """One tracked frame. ``dt``: seconds since the previously tracked
+        frame (motion-prior prediction; None = the prior's nominal period).
+        The observation is built from ``fr`` before the clock starts, so disk
+        reads are not counted as tracking time."""
+        tcfg, prior, opt, device = self.tcfg, self.prior, self.opt, self.device
+        rgb, depth = fr.rgb.to(device), fr.depth.to(device)
+        _sync()
+        t_frame = time.time()
+
+        # ---- motion prior: warm start ------------------------------------ #
+        pred = None
+        check = prior is not None and getattr(prior, "check_loss", False)
+        if prior is not None and not first:
+            pred = (prior.predict(device) if dt is None else prior.predict(device, dt=dt)).float()
+            if prior.warm_start and not check:
+                opt.set_part_deltas(pred)
+
+        # ---- observation + ROIs from the current pose; DINO extraction ---- #
+        _sync()
+        t_d = time.time()
+        obs = PosedObservation(rgb, self.cam, self.dino_fn, depth, tcfg.max_roi_resolution)
+        opt.set_observation(obs)
+        if tcfg.use_dino:
+            if tcfg.use_roi:
+                for rf in obs.roi_frames:
+                    _ = rf.dino_feats
+            else:
+                _ = obs.frame.dino_feats
+        _sync()
+        dino_ms = (time.time() - t_d) * 1000.0
+
+        # ---- pose optimisation ------------------------------------------- #
+        t_o = time.time()
+        if check and pred is not None and prior.warm_start:
+            self.n_pred_kept += _choose_start(opt, obs, pred, tcfg)
+        info = opt.step(niter=tcfg.track_niter, use_depth=tcfg.use_depth, use_rgb=tcfg.use_rgb)
+        _sync()
+        opt_ms = (time.time() - t_o) * 1000.0
+
+        # ---- motion prior: measurement update ----------------------------- #
+        if prior is not None:
+            fused = prior.update(opt.part_deltas.data, device)
+            if prior.fuse:
+                opt.set_part_deltas(fused.float())
+                opt.apply_to_model()
+        _sync()
+        return {"time_s": time.time() - t_frame, "dino_ms": dino_ms, "opt_ms": opt_ms, "loss": info.loss}
+
+    def deltas(self) -> torch.Tensor:
+        return self.opt.part_deltas.data.detach().clone()
+
+    def poses(self, deltas: Optional[torch.Tensor] = None) -> np.ndarray:
+        return self.opt.get_all_part2world(deltas).detach().cpu().numpy()
+
+    def finish(self, n_steps: int, verbose: bool, name: str) -> Dict[str, float]:
+        self.model.load_snapshot(self.snapshot)
+        diag = self.opt.depth_diagnostics()
+        if self.prior is not None and hasattr(self.prior, "mean_nis"):
+            diag["kalman_mean_nis"] = self.prior.mean_nis()
+        if self.prior is not None and getattr(self.prior, "check_loss", False):
+            diag["prediction_kept_rate"] = self.n_pred_kept / max((n_steps - 1) * self.opt.K, 1)
+        if verbose and self.tcfg.use_depth and diag["depth_drop_rate"] > 0.2:
+            print(f"  [{name}] WARNING: depth term dropped on {diag['depth_drop_rate']:.0%} of evaluations")
+        return diag
+
+
 def track_sequence(
     model: POGSModel,
     groups: ObjectGroups,
@@ -286,105 +392,219 @@ def track_sequence(
     max_frames: Optional[int] = None,
     verbose: bool = True,
 ) -> TrackingResult:
-    """Runs POGS tracking over an RGB-D sequence and scores it against GT."""
+    """Runs POGS tracking over every frame of an RGB-D sequence (offline: the
+    tracker never falls behind the camera) and scores it against GT."""
     tcfg = tracking_cfg or cfg.tracking
-    device = cfg.runtime.device
-    raster_kwargs = (
-        dict(max_per_tile=cfg.runtime.torch_raster_max_per_tile, tile_chunk=cfg.runtime.torch_raster_tile_chunk)
-        if model.backend == "torch" else {}
-    )
-    snapshot = model.state_snapshot()
-    opt = RigidGroupOptimizer(tcfg, model, groups, raster_kwargs=raster_kwargs)
-    cam = tracking_camera(seq.camera, tcfg, device)
-
+    trk = _FrameTracker(model, groups, seq, dino_fn, cfg, tcfg, motion_prior)
     frames = seq.frames if max_frames is None else seq.frames[:max_frames]
     F_n, K = len(frames), groups.num_groups
     base_centroids = {gi: groups.init_p2w[gi, :3].detach().cpu().numpy() for gi in range(K)}
     acc = _alloc(F_n, K)
     times, dino_ms, opt_ms = np.zeros(F_n), np.zeros(F_n), np.zeros(F_n)
-    n_pred_kept = 0
     losses = np.full(F_n, np.nan)
     deltas = np.zeros((F_n, K, 7), dtype=np.float32)
 
-    def make_obs(fr):
-        return PosedObservation(fr.rgb.to(device), cam, dino_fn, fr.depth.to(device), tcfg.max_roi_resolution)
-
-    # ---- initialisation on frame 0 -------------------------------------- #
-    t0 = time.time()
-    init_info = opt.initialize_obj_pose(make_obs(frames[0]), n_seeds=tcfg.init_n_seeds, verbose=False)
-    init_time = time.time() - t0
+    init_info = trk.initialize(frames[0])
     if verbose:
         print(f"  [{name}] init: coarse={init_info['coarse_loss']:.4f} fine={init_info['fine_loss']:.4f} "
-              f"in {init_time:.1f}s")
-    if motion_prior is not None:
-        motion_prior.initialize(opt.part_deltas.data)
+              f"in {init_info['init_time']:.1f}s")
 
     for fi, fr in enumerate(frames):
-        t_frame = time.time()
-
-        # ---- motion prior: warm start ------------------------------------ #
-        pred = None
-        check = motion_prior is not None and getattr(motion_prior, "check_loss", False)
-        if motion_prior is not None and fi > 0:
-            pred = motion_prior.predict(device).float()
-            if motion_prior.warm_start and not check:
-                opt.set_part_deltas(pred)
-
-        # ---- observation + ROIs from the current pose; DINO extraction ---- #
-        torch.cuda.synchronize()
-        t_d = time.time()
-        obs = make_obs(fr)
-        opt.set_observation(obs)
-        if tcfg.use_dino:
-            if tcfg.use_roi:
-                for rf in obs.roi_frames:
-                    _ = rf.dino_feats
-            else:
-                _ = obs.frame.dino_feats
-        torch.cuda.synchronize()
-        dino_ms[fi] = (time.time() - t_d) * 1000.0
-
-        # ---- pose optimisation ------------------------------------------- #
-        t_o = time.time()
-        if check and pred is not None and motion_prior.warm_start:
-            n_pred_kept += _choose_start(opt, obs, pred, tcfg)
-        info = opt.step(niter=tcfg.track_niter, use_depth=tcfg.use_depth, use_rgb=tcfg.use_rgb)
-        torch.cuda.synchronize()
-        opt_ms[fi] = (time.time() - t_o) * 1000.0
-        losses[fi] = info.loss
-
-        # ---- motion prior: measurement update ----------------------------- #
-        if motion_prior is not None:
-            fused = motion_prior.update(opt.part_deltas.data, device)
-            if motion_prior.fuse:
-                opt.set_part_deltas(fused.float())
-                opt.apply_to_model()
-
-        times[fi] = time.time() - t_frame
-        deltas[fi] = opt.part_deltas.data.detach().cpu().numpy()
-        P = opt.get_all_part2world().detach().cpu().numpy()
-        _score_frame(seq, fi, P, groups, group_to_gt, base_centroids, model_points, acc)
-
+        st = trk.step(fr, first=fi == 0)
+        times[fi], dino_ms[fi], opt_ms[fi], losses[fi] = st["time_s"], st["dino_ms"], st["opt_ms"], st["loss"]
+        deltas[fi] = trk.deltas().cpu().numpy()
+        _score_frame(seq, fi, trk.poses(), groups, group_to_gt, base_centroids, model_points, acc)
         if verbose and (fi % 10 == 0 or fi == F_n - 1):
-            print(f"    [{name}] frame {fi:3d}/{F_n}  loss={info.loss:.4f}  "
+            print(f"    [{name}] frame {fi:3d}/{F_n}  loss={st['loss']:.4f}  "
                   f"pos={np.nanmean(acc['trans'][fi]):.2f} cm  rot={np.nanmean(acc['rot'][fi]):.1f} deg  "
                   f"{times[fi] * 1000:.0f} ms")
 
-    model.load_snapshot(snapshot)
-    diag = opt.depth_diagnostics()
-    if motion_prior is not None and hasattr(motion_prior, "mean_nis"):
-        diag["kalman_mean_nis"] = motion_prior.mean_nis()
-    if motion_prior is not None and getattr(motion_prior, "check_loss", False):
-        diag["prediction_kept_rate"] = n_pred_kept / max((F_n - 1) * K, 1)
-    if verbose and tcfg.use_depth and diag["depth_drop_rate"] > 0.2:
-        print(f"  [{name}] WARNING: depth term dropped on {diag['depth_drop_rate']:.0%} of evaluations")
-
+    diag = trk.finish(F_n, verbose, name)
     return TrackingResult(
         name=name, trans_err_cm=acc["trans"], rot_err_deg=acc["rot"], yaw_err_deg=acc["yaw"],
         add=acc["add"], adds=acc["adds"], frame_times=times, dino_ms=dino_ms, opt_ms=opt_ms,
         losses=losses, pred_poses=acc["preds"], gt_poses=acc["gts"], part_deltas=deltas,
         occluded=np.array([bool(getattr(f, "occluded", False)) for f in frames]),
-        group_names=list(groups.names or []), init_time=init_time, diagnostics=diag,
+        group_names=list(groups.names or []), init_time=init_info["init_time"], diagnostics=diag,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Real-time protocol
+# --------------------------------------------------------------------------- #
+
+
+def pick_next_frame(timestamps: np.ndarray, t_free: float, last: int) -> Optional[int]:
+    """The frame a tracker that becomes free at ``t_free`` works on next: the
+    newest frame that has arrived (frames in between are skipped), or, if none
+    newer than ``last`` has arrived yet, the next one (it waits for it).
+    None when the stream is over."""
+    n = len(timestamps)
+    if last + 1 >= n:
+        return None
+    arrived = np.nonzero(timestamps[last + 1:] <= t_free + 1e-9)[0]
+    return int(last + 1 + arrived[-1]) if arrived.size else last + 1
+
+
+def estimate_sources(timestamps: np.ndarray, done_times: np.ndarray) -> np.ndarray:
+    """For every camera frame, the index of the newest tracked result already
+    finished when that frame arrives (-1: none yet, only the initial pose)."""
+    return np.searchsorted(np.asarray(done_times), np.asarray(timestamps) + 1e-9, side="right") - 1
+
+
+@dataclass
+class RealtimeResult:
+    """``now``: at every camera frame, the pose the tracker has published so
+    far (its last finished estimate, held). ``now_extrap``: the same estimate
+    moved forward to the frame's time by the Kalman filter's velocity (motion
+    prior methods only). ``processed``: accuracy at the frames actually tracked,
+    with ``frame_times`` = measured per-frame latency."""
+    name: str
+    now: TrackingResult
+    processed: TrackingResult
+    now_extrap: Optional[TrackingResult]
+    timestamps: np.ndarray            # (F,) camera frame times (s)
+    proc_frames: np.ndarray           # (P,) camera frame index of every tracked frame
+    proc_start: np.ndarray            # (P,) s
+    proc_done: np.ndarray             # (P,) s
+    cam_src: np.ndarray               # (F,) index into proc_* (-1: initial pose)
+
+    def schedule(self) -> Dict[str, object]:
+        return {"timestamps": self.timestamps.tolist(), "proc_frames": self.proc_frames.tolist(),
+                "proc_start": self.proc_start.tolist(), "proc_done": self.proc_done.tolist(),
+                "cam_src": self.cam_src.tolist()}
+
+
+def realtime_stats(timestamps: np.ndarray, proc_frames: np.ndarray, proc_start: np.ndarray,
+                   proc_done: np.ndarray, cam_src: np.ndarray) -> Dict[str, float]:
+    lat = proc_done - proc_start
+    ok = cam_src >= 0
+    age = np.full(len(timestamps), np.nan)
+    age[ok] = timestamps[ok] - timestamps[proc_frames[cam_src[ok]]]
+    skipped = np.diff(proc_frames) - 1 if len(proc_frames) > 1 else np.zeros(1)
+    cam_hz = 1.0 / float(np.median(np.diff(timestamps))) if len(timestamps) > 1 else float("nan")
+    return {
+        "camera_hz": cam_hz,
+        "latency_ms": float(np.mean(lat) * 1000),
+        "tracker_hz": float(1.0 / np.mean(lat)),
+        "frames_tracked_frac": len(proc_frames) / len(timestamps),
+        "frames_skipped_mean": float(np.mean(skipped)),
+        "estimate_age_ms": float(np.nanmean(age) * 1000),
+        "estimate_age_max_ms": float(np.nanmax(age) * 1000),
+    }
+
+
+def track_realtime(
+    model: POGSModel,
+    groups: ObjectGroups,
+    seq,
+    dino_fn: DinoFn,
+    cfg: POGSConfig,
+    group_to_gt: Dict[int, int],
+    name: str = "POGS",
+    tracking_cfg: Optional[TrackingConfig] = None,
+    model_points: Optional[Dict[int, np.ndarray]] = None,
+    motion_prior: Optional[MotionPrior] = None,
+    latency_fn: Optional[Callable[[Dict[str, float]], float]] = None,
+    verbose: bool = True,
+) -> RealtimeResult:
+    """Real-time protocol on a high-rate camera stream (``seq`` timestamps).
+
+    Simulated clock: the tracker starts on frame 0 at t = 0 (initialisation is
+    done beforehand, while the object is still at rest); each tracked frame
+    takes its MEASURED compute time (``latency_fn(step_info)`` overrides it,
+    e.g. for what-if runs); when it finishes it takes the newest frame that has
+    arrived, skipping the rest (``pick_next_frame``). The motion prior predicts
+    over the true gap between tracked frames. Scored at every camera frame on
+    what the tracker has published by then (``estimate_sources``)."""
+    tcfg = tracking_cfg or cfg.tracking
+    trk = _FrameTracker(model, groups, seq, dino_fn, cfg, tcfg, motion_prior)
+    frames = seq.frames
+    ts = np.array([f.timestamp_sec for f in frames], dtype=np.float64)
+    ts = ts - ts[0]
+    F_n, K = len(frames), groups.num_groups
+    base_centroids = {gi: groups.init_p2w[gi, :3].detach().cpu().numpy() for gi in range(K)}
+    has_kf = motion_prior is not None and hasattr(motion_prior, "filters")
+
+    init_info = trk.initialize(frames[0])
+    init_deltas = trk.deltas()
+    if verbose:
+        print(f"  [{name}] init in {init_info['init_time']:.1f}s; camera {1.0 / np.median(np.diff(ts)):.0f} Hz, "
+              f"{F_n} frames over {ts[-1]:.1f}s")
+
+    proc, starts, dones, steps, p_deltas, p_filters = [], [], [], [], [], []
+    t_free, last = 0.0, -1
+    while True:
+        j = pick_next_frame(ts, t_free, last)
+        if j is None or (last >= 0 and t_free > ts[-1]):
+            break
+        start = max(t_free, ts[j])
+        st = trk.step(frames[j], first=last < 0, dt=None if last < 0 else float(ts[j] - ts[last]))
+        lat = float(latency_fn(st)) if latency_fn is not None else st["time_s"]
+        proc.append(j), starts.append(start), dones.append(start + lat), steps.append(st)
+        p_deltas.append(trk.deltas())
+        p_filters.append(copy.deepcopy(motion_prior.filters) if has_kf else None)
+        t_free, last = start + lat, j
+        if verbose and len(proc) % 5 == 1:
+            print(f"    [{name}] t={start:5.2f}s  frame {j:3d}/{F_n}  {lat * 1000:.0f} ms  loss={st['loss']:.4f}")
+
+    proc_a, start_a, done_a = np.array(proc), np.array(starts), np.array(dones)
+    src = estimate_sources(ts, done_a)
+
+    # ---- score: frames actually tracked ------------------------------------ #
+    P_n = len(proc)
+    acc_p = _alloc(P_n, K)
+    for r, (j, d) in enumerate(zip(proc, p_deltas)):
+        _score_frame(seq, j, trk.poses(d), groups, group_to_gt, base_centroids, model_points, acc_p, row=r)
+
+    # ---- score: every camera frame, held and extrapolated estimates ------- #
+    acc_h, acc_x = _alloc(F_n, K), (_alloc(F_n, K) if has_kf else None)
+    d_h = np.zeros((F_n, K, 7), dtype=np.float32)
+    d_x = np.zeros((F_n, K, 7), dtype=np.float32) if has_kf else None
+    for c in range(F_n):
+        k = src[c]
+        d = init_deltas if k < 0 else p_deltas[k]
+        d_h[c] = d.cpu().numpy()
+        _score_frame(seq, c, trk.poses(d), groups, group_to_gt, base_centroids, model_points, acc_h)
+        if has_kf:
+            if k >= 0:
+                age = float(ts[c] - ts[proc[k]])
+                dx = torch.from_numpy(np.stack([f.extrapolate(p, age) for f, p in
+                                                zip(p_filters[k], d.cpu().double().numpy())])).to(d.device)
+            else:
+                dx = d
+            d_x[c] = dx.cpu().numpy()
+            _score_frame(seq, c, trk.poses(dx.float()), groups, group_to_gt, base_centroids, model_points, acc_x)
+
+    diag = trk.finish(P_n, verbose, name)
+    diag.update(realtime_stats(ts, proc_a, start_a, done_a, src))
+    occ = np.array([bool(getattr(f, "occluded", False)) for f in frames])
+    names = list(groups.names or [])
+    zeros = np.zeros(F_n)
+
+    def timeline(acc, deltas):
+        return TrackingResult(
+            name=name, trans_err_cm=acc["trans"], rot_err_deg=acc["rot"], yaw_err_deg=acc["yaw"],
+            add=acc["add"], adds=acc["adds"], frame_times=zeros, dino_ms=zeros * np.nan, opt_ms=zeros * np.nan,
+            losses=zeros * np.nan, pred_poses=acc["preds"], gt_poses=acc["gts"], part_deltas=deltas,
+            occluded=occ, group_names=names, init_time=init_info["init_time"], diagnostics=dict(diag),
+        )
+
+    processed = TrackingResult(
+        name=name, trans_err_cm=acc_p["trans"], rot_err_deg=acc_p["rot"], yaw_err_deg=acc_p["yaw"],
+        add=acc_p["add"], adds=acc_p["adds"], frame_times=done_a - start_a,
+        dino_ms=np.array([s["dino_ms"] for s in steps]), opt_ms=np.array([s["opt_ms"] for s in steps]),
+        losses=np.array([s["loss"] for s in steps]), pred_poses=acc_p["preds"], gt_poses=acc_p["gts"],
+        part_deltas=np.stack([d.cpu().numpy() for d in p_deltas]), occluded=occ[proc_a],
+        group_names=names, init_time=init_info["init_time"], diagnostics=dict(diag),
+    )
+    if verbose:
+        print(f"  [{name}] tracked {P_n}/{F_n} frames, {diag['latency_ms']:.0f} ms/frame "
+              f"({diag['tracker_hz']:.1f} Hz), mean estimate age {diag['estimate_age_ms']:.0f} ms")
+    return RealtimeResult(
+        name=name, now=timeline(acc_h, d_h), processed=processed,
+        now_extrap=timeline(acc_x, d_x) if has_kf else None,
+        timestamps=ts, proc_frames=proc_a, proc_start=start_a, proc_done=done_a, cam_src=src,
     )
 
 

@@ -16,7 +16,12 @@ capture/                       Phase 1 scan: 35 hemisphere views
                             phase, rotation / yaw / tilt, occlusion fraction per
                             moving object, gt_deltas for every object)
     preview.mp4
+<condition>_s<seed>_30hz/      the same trajectory at 30 Hz (355 frames) for the
+                               real-time protocol; read lazily (LazyFrame)
 ```
+
+Both `capture_metadata.json` and every `tracking_metadata.json` record
+`scene_version`; `generate_benchmark` re-renders anything from an older scene.
 
 Conditions (12 x 3 seeds = 36 sequences): `base`, `yaw15`,
 `yaw90`, `tilt30`, `tilt60`, `combined45`, `occ_none`, `occ_hand`, `occ_full`,

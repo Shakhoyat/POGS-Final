@@ -81,9 +81,7 @@ class SE3KalmanFilter:
 
     def __init__(self, cfg: KalmanConfig):
         self.cfg = cfg
-        self.alpha = float(np.exp(-cfg.dt / cfg.vel_damping_tau)) if cfg.vel_damping_tau > 0 else 1.0
-        self.F_t, self.Q_t = _cv_matrices(cfg.dt, cfg.accel_std, self.alpha)
-        self.F_r, self.Q_r = _cv_matrices(cfg.dt, cfg.ang_accel_std, self.alpha)
+        self.alpha, self.F_t, self.Q_t, self.F_r, self.Q_r = self._model(cfg.dt)
         self.R_t = np.eye(3) * cfg.meas_pos_std**2
         self.R_r = np.eye(3) * cfg.meas_rot_std**2
         self.p = np.zeros(3)
@@ -114,6 +112,16 @@ class SE3KalmanFilter:
     def _conj(q: np.ndarray) -> np.ndarray:
         return quat_conjugate(torch.from_numpy(q)[None])[0].numpy()
 
+    def _damping(self, dt: float) -> float:
+        tau = self.cfg.vel_damping_tau
+        return float(np.exp(-dt / tau)) if tau > 0 else 1.0
+
+    def _model(self, dt: float):
+        a = self._damping(dt)
+        F_t, Q_t = _cv_matrices(dt, self.cfg.accel_std, a)
+        F_r, Q_r = _cv_matrices(dt, self.cfg.ang_accel_std, a)
+        return a, F_t, Q_t, F_r, Q_r
+
     # -- API --------------------------------------------------------------- #
 
     def initialize(self, posevec: np.ndarray) -> None:
@@ -127,17 +135,32 @@ class SE3KalmanFilter:
         self.P_r = np.diag([c.init_rot_std**2] * 3 + [c.init_omega_std**2] * 3)
         self.initialized = True
 
-    def predict(self) -> np.ndarray:
+    def predict(self, dt: Optional[float] = None) -> np.ndarray:
+        """Propagate the state by ``dt`` seconds (default ``cfg.dt``; the
+        real-time protocol passes the actual, uneven gap between frames)."""
         assert self.initialized
-        dt = self.cfg.dt
+        if dt is None or abs(dt - self.cfg.dt) < 1e-9:
+            dt, alpha, F_t, Q_t, F_r, Q_r = self.cfg.dt, self.alpha, self.F_t, self.Q_t, self.F_r, self.Q_r
+        else:
+            alpha, F_t, Q_t, F_r, Q_r = self._model(dt)
         self.p = self.p + self.v * dt
         self.q = self._qmul(self._exp(self.w * dt), self.q)
-        self.v = self.v * self.alpha
-        self.w = self.w * self.alpha
+        self.v = self.v * alpha
+        self.w = self.w * alpha
         self.q /= np.linalg.norm(self.q)
-        self.P_t = self.F_t @ self.P_t @ self.F_t.T + self.Q_t
-        self.P_r = self.F_r @ self.P_r @ self.F_r.T + self.Q_r
+        self.P_t = F_t @ self.P_t @ F_t.T + Q_t
+        self.P_r = F_r @ self.P_r @ F_r.T + Q_r
         return self.posevec()
+
+    def extrapolate(self, posevec: np.ndarray, dt: float) -> np.ndarray:
+        """``posevec`` moved forward ``dt`` seconds with the filter's current
+        (damped) velocity; the filter state is not changed. Used to
+        latency-compensate an estimate that is ``dt`` old."""
+        tau = self.cfg.vel_damping_tau
+        h = tau * (1.0 - np.exp(-dt / tau)) if tau > 0 else dt   # integral of exp(-t/tau)
+        p = np.asarray(posevec[:3], dtype=np.float64) + self.v * h
+        q = self._qmul(self._exp(self.w * h), np.asarray(posevec[3:], dtype=np.float64))
+        return np.concatenate([p, q / np.linalg.norm(q)]).astype(np.float32)
 
     def _block_update(self, P, R, y):
         S = self.H @ P @ self.H.T + R
@@ -199,8 +222,13 @@ class MultiObjectKalman:
         for f, p in zip(self.filters, pv):
             f.initialize(p)
 
-    def predict(self, device=None) -> torch.Tensor:
-        out = torch.from_numpy(np.stack([f.predict() for f in self.filters]))
+    def predict(self, device=None, dt: Optional[float] = None) -> torch.Tensor:
+        out = torch.from_numpy(np.stack([f.predict(dt) for f in self.filters]))
+        return out.to(device) if device is not None else out
+
+    def extrapolate(self, posevecs: torch.Tensor, dt: float, device=None) -> torch.Tensor:
+        pv = posevecs.detach().cpu().double().numpy()
+        out = torch.from_numpy(np.stack([f.extrapolate(p, dt) for f, p in zip(self.filters, pv)]))
         return out.to(device) if device is not None else out
 
     def update(self, posevecs: torch.Tensor, device=None) -> torch.Tensor:

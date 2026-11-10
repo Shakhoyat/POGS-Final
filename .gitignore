@@ -56,3 +56,8 @@ dist/
 # Generated data (regenerate with the scripts in scene_generator/ and experiments/)
 datasets/synthetic_scenes/
 model_checkpoints/*/
+
+# Local run logs and one-off job scripts
+logs/
+# Per-tile preview images (the contact sheet holds them all)
+data_results/scene_preview/tile_*.png

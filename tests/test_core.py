@@ -241,3 +241,172 @@ def test_kalman_damping_and_speed_limit():
     for _ in range(10):
         f.predict()
     assert np.linalg.norm(f.v) < 0.2 * v0
+
+
+# --------------------------------------------------------------------------- #
+# Scene v2 (materials, layout) and the real-time protocol
+# --------------------------------------------------------------------------- #
+
+
+def test_texture_moves_with_object():
+    """Textures are evaluated in the primitive's own frame (the first generator
+    used world coordinates, so moving objects slid under a fixed pattern)."""
+    from scene_generator.materials import surface_color
+    from scene_generator.pick_place_scene import build_pick_place_scene
+    from scene_generator.scene_builder import FlatScene
+
+    sc = FlatScene(build_pick_place_scene())
+    for oid in (1, 3, 4, 5):                                  # mug, soup, apple, cereal
+        i = int((sc.obj_id == oid).nonzero()[0])
+        idx = torch.tensor([i] * 3)
+        pts = sc.t[idx] + torch.tensor([[0.02, 0.0, 0.01], [0.0, 0.025, -0.01], [-0.015, 0.01, 0.02]])
+        D = np.eye(4)
+        D[:3, :3] = quat_to_rotmat(so3_exp(torch.tensor([[0.3, -0.5, 1.1]], dtype=torch.float64)))[0].numpy()
+        D[:3, 3] = [0.07, -0.03, 0.05]
+        moved = sc.clone_with_transforms({oid: D})
+        R, t = torch.tensor(D[:3, :3], dtype=torch.float32), torch.tensor(D[:3, 3], dtype=torch.float32)
+        assert torch.allclose(surface_color(sc, idx, pts), surface_color(moved, idx, pts @ R.T + t), atol=1e-4)
+
+
+def test_scene_layout_no_overlap():
+    """Table top exactly at TABLE_TOP_Z; floor objects clear of the table
+    footprint and of each other (the soup can used to sit inside the table)."""
+    import scene_generator.pick_place_benchmark as b
+
+    objs = b.build_pick_place_scene()
+    table = next(o for o in objs if o.obj_id == b.TABLE_ID)
+    top = table.prims[0]
+    assert abs(table.position[2] + top.offset[2] + top.scale[2] - b.TABLE_TOP_Z) < 1e-12
+    tx0, tx1 = table.position[0] - top.scale[0], table.position[0] + top.scale[0]
+    ty0, ty1 = table.position[1] - top.scale[1], table.position[1] + top.scale[1]
+
+    def footprint(o, n=24):
+        """Top-down points covering every primitive of ``o`` (world xy)."""
+        from scene_generator.primitives import BOX, euler_to_R
+        c, sn = np.cos(o.yaw), np.sin(o.yaw)
+        Ro = np.array([[c, -sn, 0], [sn, c, 0], [0, 0, 1.0]])
+        g = np.linspace(-1, 1, n)
+        u, v = np.meshgrid(g, g)
+        uv = np.stack([u.ravel(), v.ravel()], -1)
+        out = []
+        for p in o.prims:
+            loc = uv if p.kind == BOX else uv[(uv ** 2).sum(-1) <= 1.0]
+            pts = np.c_[loc * np.array(p.scale[:2]), np.zeros(len(loc))]
+            w = (Ro @ (euler_to_R(*p.rot_euler) @ pts.T + np.array(p.offset)[:, None])).T + np.array(o.position)
+            out.append(w[:, :2])
+        return np.concatenate(out)
+
+    movers = [o for o in objs if o.obj_id in b.OBJECT_NAMES]
+    fps = {o.name: footprint(o) for o in movers}
+    for o in movers:
+        x, y = fps[o.name][:, 0], fps[o.name][:, 1]
+        gap = np.maximum.reduce([tx0 - x, x - tx1, ty0 - y, y - ty1])
+        assert gap.min() > 0.02, (o.name, gap.min())               # >= 2 cm off the table footprint
+    for i, a in enumerate(movers):
+        for c in movers[i + 1:]:
+            d = np.linalg.norm(fps[a.name][:, None] - fps[c.name][None], axis=-1).min()
+            assert d > 0.02, (a.name, c.name, d)
+
+
+def test_realtime_sequences_share_trajectories():
+    """Frame 6k of the 30 Hz rendering is frame k of the 5 Hz one."""
+    import scene_generator.pick_place_benchmark as b
+
+    cfg = b.BenchmarkConfig()
+    rt = b.realtime_config(cfg)
+    assert rt.fps == 30.0 and rt.n_frames == 355
+    objs = b.build_pick_place_scene()
+    cond = b.CONDITIONS["base"]
+    prm = b.sample_params(np.random.default_rng(1), "mug", cfg)
+    p5, _ = b.plan_pick_and_place(objs, 1, cond, prm, cfg)
+    p30, _ = b.plan_pick_and_place(objs, 1, cond, prm, rt)
+    for k in range(cfg.n_frames):
+        assert np.allclose(p5[k]["delta"], p30[6 * k]["delta"])
+    c = b.Case("base", 0, 2, realtime=True)
+    assert c.sequence == "base_s0_30hz" and c.name == "base_s0_30hz__rt2x_stereo"
+    assert b.Case("base", 0, 2).name == "base_s0__2x_stereo"     # offline names unchanged
+
+
+def test_pick_next_frame_and_sources():
+    from common.evaluate import estimate_sources, pick_next_frame
+
+    ts = np.arange(10) / 10.0                                  # 10 Hz camera
+    assert pick_next_frame(ts, 0.0, -1) == 0
+    assert pick_next_frame(ts, 0.35, 0) == 3                   # newest arrived, 1-2 skipped
+    assert pick_next_frame(ts, 0.05, 0) == 1                   # nothing new yet: wait for 1
+    assert pick_next_frame(ts, 5.0, 9) is None
+    src = estimate_sources(ts, np.array([0.25, 0.62]))
+    assert src.tolist() == [-1, -1, -1, 0, 0, 0, 0, 1, 1, 1]
+
+
+def test_kalman_variable_dt_and_extrapolate():
+    from common.kalman import KalmanConfig, SE3KalmanFilter
+
+    cfg = KalmanConfig(dt=0.2, vel_damping_tau=0.0, max_speed=0.0, max_ang_speed=0.0)
+    a, b2 = SE3KalmanFilter(cfg), SE3KalmanFilter(cfg)
+    for f in (a, b2):
+        f.initialize(np.array([0, 0, 0, 1, 0, 0, 0.0]))
+        f.v = np.array([0.1, 0.0, 0.0])
+    a.predict(0.1), a.predict(0.1)
+    b2.predict(0.2)
+    assert np.allclose(a.p, b2.p) and np.allclose(a.p, [0.02, 0, 0])
+    assert np.trace(a.P_t) < np.trace(b2.P_t) + 1e-6           # same process noise order
+    x = a.extrapolate(np.array([1.0, 0, 0, 1, 0, 0, 0]), 0.5)
+    assert np.allclose(x[:3], [1.05, 0, 0], atol=1e-6)
+    assert np.allclose(a.p, [0.02, 0, 0])                       # state untouched
+    d = SE3KalmanFilter(KalmanConfig(dt=0.2, vel_damping_tau=1.0))
+    d.initialize(np.zeros(3).tolist() + [1, 0, 0, 0])
+    d.v = np.array([0.1, 0, 0])
+    assert np.isclose(d.extrapolate(np.array([0, 0, 0, 1, 0, 0, 0.0]), 10.0)[0], 0.1 * (1 - np.exp(-10)), atol=1e-5)
+
+
+def test_track_realtime_with_fake_tracker(monkeypatch):
+    """The real-time loop on a fake tracker with a fixed 0.25 s latency on a
+    10 Hz stream: frames 0, 2, 5, 7 are tracked (the newest arrived when the
+    tracker frees up; 9 would finish after the stream ends), and every camera
+    frame is scored on the last estimate finished by then."""
+    import types
+    import common.evaluate as ev
+
+    class FakeTracker:
+        def __init__(self, *a, **k):
+            self.d = torch.zeros(1, 7)
+            self.d[0, 3] = 1.0
+            self.prior = None
+
+        def initialize(self, fr):
+            return {"init_time": 0.0}
+
+        def step(self, fr, first, dt=None):
+            self.d = self.d.clone()
+            self.d[0, 0] = float(fr.frame_idx)                 # "estimate" = frame index
+            return {"time_s": 0.25, "dino_ms": 1.0, "opt_ms": 1.0, "loss": 0.0}
+
+        def deltas(self):
+            return self.d.clone()
+
+        def poses(self, d=None):
+            d = self.d if d is None else d
+            P = np.tile(np.eye(4), (1, 1, 1))
+            P[0, 0, 3] = float(d[0, 0])
+            return P
+
+        def finish(self, n, verbose, name):
+            return {}
+
+    monkeypatch.setattr(ev, "_FrameTracker", FakeTracker)
+    frames = [types.SimpleNamespace(frame_idx=i, timestamp_sec=i / 10.0, occluded=False,
+                                    gt_delta={1: np.eye(4)}) for i in range(10)]
+    seq = types.SimpleNamespace(frames=frames, camera=None)
+    groups = types.SimpleNamespace(num_groups=1, init_p2w=torch.zeros(1, 7), names=["mug"])
+    rt = ev.track_realtime(None, groups, seq, None, None, {0: 1}, tracking_cfg=object(), verbose=False)
+    assert rt.proc_frames.tolist() == [0, 2, 5, 7]
+    assert np.allclose(rt.proc_done, [0.25, 0.5, 0.75, 1.0])
+    # held estimate x at each camera frame (frame index it came from; init = 0)
+    held = rt.now.pred_poses[:, 0, 0, 3]
+    assert held.tolist() == [0, 0, 0, 0, 0, 2, 2, 2, 5, 5]
+    assert rt.now_extrap is None
+    st = rt.now.diagnostics
+    assert np.isclose(st["latency_ms"], 250) and np.isclose(st["tracker_hz"], 4.0)
+    assert np.isclose(st["frames_skipped_mean"], 4 / 3)
+    assert np.isclose(st["estimate_age_ms"], np.mean([300, 400, 300, 400, 500, 300, 400]))   # from frame 3 on

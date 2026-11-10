@@ -26,6 +26,16 @@ class Primitive:
     texture_freq: float = 22.0
     texture_amp: float = 0.16
     texture_phase: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    # material (see ``materials.surface_color``); textures live in the
+    # primitive's own frame, so they move with the object
+    pattern: str = "sine"
+    """sine | noise | wood | split | stripes | blotch | tiles | brushed"""
+    color2: Optional[Tuple[float, float, float]] = None
+    """Second colour used by split / stripes / blotch / tiles / wood."""
+    roughness: float = 0.5
+    """0 = mirror-like highlight, 1 = fully matte."""
+    metallic: float = 0.0
+    """1 = specular tinted by the base colour, little diffuse."""
 
 
 def euler_to_R(rx: float, ry: float, rz: float) -> np.ndarray:

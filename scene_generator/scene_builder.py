@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import torch
 
+from .materials import PATTERNS, surface_color
 from .primitives import Primitive, BOX, ELLIPSOID, CYLINDER, euler_to_R
 from .objects import (
     SceneObject,
@@ -67,7 +68,7 @@ class FlatScene:
         self.objects = list(objects)
         self.device = device
         kinds, scales, Rs, ts, colors, targs = [], [], [], [], [], []
-        obj_ids = []
+        obj_ids, patterns, colors2, rough, metal = [], [], [], [], []
 
         for obj in objects:
             c, s = math.cos(obj.yaw), math.sin(obj.yaw)
@@ -87,6 +88,10 @@ class FlatScene:
                 colors.append(prim.color)
                 targs.append((prim.texture_freq, prim.texture_amp, *prim.texture_phase))
                 obj_ids.append(obj.obj_id)
+                patterns.append(PATTERNS[prim.pattern])
+                colors2.append(prim.color2 if prim.color2 is not None else prim.color)
+                rough.append(prim.roughness)
+                metal.append(prim.metallic)
 
         self.kind = torch.tensor(kinds, dtype=torch.long, device=device)
         self.scale = torch.tensor(np.array(scales), dtype=torch.float32, device=device)
@@ -95,6 +100,10 @@ class FlatScene:
         self.color = torch.tensor(np.array(colors), dtype=torch.float32, device=device)
         self.tex_args = torch.tensor(np.array(targs), dtype=torch.float32, device=device)
         self.obj_id = torch.tensor(obj_ids, dtype=torch.long, device=device)
+        self.pattern = torch.tensor(patterns, dtype=torch.long, device=device)
+        self.color2 = torch.tensor(np.array(colors2), dtype=torch.float32, device=device)
+        self.roughness = torch.tensor(rough, dtype=torch.float32, device=device)
+        self.metallic = torch.tensor(metal, dtype=torch.float32, device=device)
 
     def n_prims(self) -> int:
         return self.kind.shape[0]
@@ -318,14 +327,9 @@ def render_scene(
     # Object color & procedural textures
     valid = prim_flat >= 0
     p_safe = prim_flat.clamp(min=0)
-    base_color = scene.color[p_safe]
 
     pts = origin + t_flat.unsqueeze(-1) * dirs
-    targs = scene.tex_args[p_safe]
-    freq = targs[:, 0:1]
-    amp = targs[:, 1:2]
-    pattern = 0.5 + 0.5 * torch.sin(pts[:, 0:1] * freq) * torch.cos(pts[:, 1:2] * freq)
-    tex_color = base_color * (1.0 + amp * (pattern - 0.5))
+    tex_color = surface_color(scene, p_safe, pts)
 
     rgb = tex_color * shade.unsqueeze(-1)
     rgb = torch.where(valid.unsqueeze(-1), rgb, torch.tensor([0.94, 0.94, 0.95], device=dev))

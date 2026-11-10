@@ -179,10 +179,15 @@ class GroupingConfig:
     """Gaussians below this height (metres above the floor) are treated as the
     support surface and dropped from tracked clusters."""
     max_footprint_m2: float = 0.06
+    """Robust (5-95th percentile) XY extent above which a cluster is a support
+    surface. A min/max extent is not robust: a few hundred stray floor
+    Gaussians in an object's cluster inflated it past 0.4 m^2 (scene v2)."""
     max_share: float = 0.40
-    background_sim_thresh: float = 0.8
+    background_sim_thresh: float = 0.98
     """Cosine similarity to the negative-mask target (all-ones unit vector)
-    above which a cluster is background."""
+    above which a cluster is background. The negative-mask term drives true
+    background to ~1.0 (0.999 measured); 0.8 also rejected the mug (0.94 on
+    scene v2), whose features are distinct but happen to lie nearer."""
     min_object_share: float = 0.01
     """Clusters holding less than this share of the remaining Gaussians are
     fragments, not objects."""

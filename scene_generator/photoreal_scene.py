@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import torch
 
+from .materials import specular_params, surface_color
 from .primitives import Primitive, BOX, ELLIPSOID, CYLINDER, euler_to_R
 from .objects import SceneObject
 from common.geometry import PinholeCamera
@@ -137,6 +138,13 @@ def make_robot_gripper(
         )
     )
 
+    for p in prims:
+        if p.color == grip_color:
+            p.pattern, p.texture_freq, p.texture_amp, p.roughness = "noise", 400.0, 0.12, 0.9
+        elif p.color == (0.0, 0.88, 0.98):
+            p.pattern, p.texture_amp, p.roughness = "noise", 0.0, 0.1
+        else:
+            p.pattern, p.texture_freq, p.texture_amp, p.roughness, p.metallic = "brushed", 300.0, 0.08, 0.35, 0.25
     return SceneObject(name="robot_gripper", prims=prims, movable=False, obj_id=99)
 
 
@@ -447,12 +455,21 @@ def render_photoreal_scene(
     L_fill = L_fill / torch.linalg.norm(L_fill)
     diffuse_fill = (norm_flat @ L_fill).clamp(min=0.0) * 0.35
 
-    # 3. Blinn-Phong Specular Reflection
+    # 3. Blinn-Phong specular from the material's roughness / metallic
+    tex_color = surface_color(scene, p_safe, pts)
+    exponent, ks, metal = specular_params(scene, p_safe)
     V = -dirs # View direction
     H_key = L_key.unsqueeze(0) + V
     H_key = H_key / torch.linalg.norm(H_key, dim=-1, keepdim=True).clamp(min=1e-6)
-    specular_key = (norm_flat * H_key).sum(dim=-1).clamp(min=0.0) ** 36
-    specular = shadow_factor * specular_key * 0.40
+    n_dot_h = (norm_flat * H_key).sum(dim=-1).clamp(min=0.0)
+    spec = shadow_factor * ks * n_dot_h ** exponent * (diffuse_key > 0).float()
+    H_fill = L_fill.unsqueeze(0) + V
+    H_fill = H_fill / torch.linalg.norm(H_fill, dim=-1, keepdim=True).clamp(min=1e-6)
+    spec = spec + 0.3 * ks * (norm_flat * H_fill).sum(dim=-1).clamp(min=0.0) ** exponent
+    # grazing-angle sheen on smooth surfaces (Schlick-style Fresnel)
+    n_dot_v = (norm_flat * V).sum(dim=-1).clamp(min=0.0)
+    spec = spec + 0.5 * ks * (1.0 - n_dot_v) ** 5
+    spec_col = torch.lerp(torch.ones_like(tex_color), tex_color, metal.unsqueeze(-1))
 
     # Ambient Contact Occlusion (darkens tabletop immediately beneath objects)
     ao_factor = torch.clamp((pts[:, 2] + 0.005) / 0.04, 0.40, 1.0)
@@ -460,18 +477,10 @@ def render_photoreal_scene(
     # Total illumination shade
     ambient = 0.22
     total_diffuse = shadow_factor * (diffuse_key * 0.75) + diffuse_fill
-    shade = (ambient * ao_factor) + total_diffuse
-
-    # Object color & procedural textures
-    base_color = scene.color[p_safe]
-    targs = scene.tex_args[p_safe]
-    freq = targs[:, 0:1]
-    amp = targs[:, 1:2]
-    pattern = 0.5 + 0.5 * torch.sin(pts[:, 0:1] * freq) * torch.cos(pts[:, 1:2] * freq)
-    tex_color = base_color * (1.0 + amp * (pattern - 0.5))
+    shade = ((ambient * ao_factor) + total_diffuse) * (1.0 - 0.75 * metal)
 
     # Combined radiance: Texture * Diffuse + Specular highlights
-    rgb = (tex_color * shade.unsqueeze(-1)) + specular.unsqueeze(-1)
+    rgb = (tex_color * shade.unsqueeze(-1)) + spec.unsqueeze(-1) * spec_col
     # Background color (subtle neutral studio gradient)
     bg_gradient = 0.92 - 0.05 * (dirs[:, 2:3] + 0.5)
     rgb = torch.where(valid.unsqueeze(-1), rgb, bg_gradient.expand(-1, 3))
