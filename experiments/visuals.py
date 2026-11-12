@@ -30,13 +30,13 @@ import cv2
 import numpy as np
 import torch
 
-from common.config import POGSConfig
-from common.evaluate import SUCCESS_POS_CM, SUCCESS_ROT_DEG, tracking_camera
-from common.geometry import apply_group_deltas, quat_normalize
-from common.raster import rasterize
-from common.grouping import subset_groups
+from model.pogs.config import POGSConfig
+from model.pogs.evaluate import SUCCESS_POS_CM, SUCCESS_ROT_DEG, tracking_camera
+from model.pogs.geometry import apply_group_deltas, quat_normalize
+from model.pogs.raster import rasterize
+from model.pogs.grouping import subset_groups
 from experiments.pipeline import DATASET_DIR, RUNS_DIR, _case_groups
-from scene_generator.pick_place_benchmark import Case, load_case
+from data.scene_generator.pick_place_benchmark import Case, load_case
 
 # RGB (frames are RGB until written)
 GREEN, CYAN, WHITE, ORANGE, GREY = (60, 220, 60), (0, 220, 255), (255, 255, 255), (255, 160, 40), (150, 150, 150)

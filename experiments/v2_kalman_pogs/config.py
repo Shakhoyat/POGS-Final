@@ -1,7 +1,7 @@
 """
 v2 configuration: identical to v1 (same checkpoint, same grouping, same
 tracking settings); the ONLY change is a per-object constant-velocity SE(3)
-Kalman filter (``common.kalman``) plugged into the shared tracking loop.
+Kalman filter (``model.pogs.kalman``) plugged into the shared tracking loop.
 
 Claim under test: the motion prior lets POGS keep its accuracy with fewer
 optimiser steps per frame (speed) and on faster motion (``speed`` factor).
@@ -23,7 +23,7 @@ were discarded. The "fuse" variant was dropped for the same double-counting.
 
 from __future__ import annotations
 
-from common.kalman import KalmanConfig, KalmanMotionPrior
+from model.pogs.kalman import KalmanConfig, KalmanMotionPrior
 from experiments.pipeline import MethodSpec
 from experiments.v1_base_pogs.config import get_v1_config
 

@@ -11,7 +11,7 @@ import time
 from experiments.pipeline import build_groups, run_suite, train_or_load, rescore_runs
 from experiments.v3_scene_mustard.config import FACTORS_V3, RESULTS_DIR, get_v3_config, v3_methods
 from experiments.visuals import make_dashboards
-from scene_generator.pick_place_benchmark import benchmark_cases
+from data.scene_generator.pick_place_benchmark import benchmark_cases
 
 
 def main(device: str = "cuda:0", videos: bool = True):

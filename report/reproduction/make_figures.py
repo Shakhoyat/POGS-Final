@@ -23,13 +23,13 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from scene_generator.pick_place_benchmark import FACTORS, SCENE_VERSION  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from data.scene_generator.pick_place_benchmark import FACTORS, SCENE_VERSION  # noqa: E402
 
 RUNS = "data_results/benchmark_runs"
 DATA = "datasets/synthetic_scenes/pick_place_floor_table"
 CKPT = "model_checkpoints/pick_place_floor_table"
-OUT = "report/figures"
+OUT = "report/reproduction/figures"
 
 plt.rcParams.update({
     "font.family": "serif", "font.size": 8, "axes.titlesize": 8.5, "axes.labelsize": 8,

@@ -15,7 +15,7 @@ import time
 from experiments.pipeline import DATASET_DIR, LATENCY_COMP, build_groups, run_realtime_suite, train_or_load
 from experiments.realtime.config import RESULTS_DIR, get_realtime_config, realtime_methods
 from experiments.visuals import make_dashboards
-from scene_generator.pick_place_benchmark import (
+from data.scene_generator.pick_place_benchmark import (
     N_SEEDS, REALTIME_CONDITIONS, REALTIME_SPEEDS, generate_benchmark, realtime_cases,
 )
 

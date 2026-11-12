@@ -69,7 +69,7 @@ import cv2
 import numpy as np
 import torch
 
-from common.geometry import PinholeCamera, look_at
+from model.pogs.geometry import PinholeCamera, look_at
 from .capture_generator import CaptureData, dbscan_filter, hemisphere_trajectory, save_pointcloud_ply
 from .objects import make_hand
 from .photoreal_scene import make_robot_gripper, render_photoreal_scene

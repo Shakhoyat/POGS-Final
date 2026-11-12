@@ -18,20 +18,20 @@ import numpy as np
 import pandas as pd
 import torch
 
-from common.checkpoint import checkpoint_exists, load_checkpoint, save_checkpoint, write_json
-from common.config import POGSConfig
-from common.encoders import DinoExtractor, OpenCLIPNetwork
-from common.evaluate import (
+from model.pogs.checkpoint import checkpoint_exists, load_checkpoint, save_checkpoint, write_json
+from model.pogs.config import POGSConfig
+from model.pogs.encoders import DinoExtractor, OpenCLIPNetwork
+from model.pogs.evaluate import (
     TrackingResult, adds_metric, adds_success_rate, object_diameter, object_model_points,
     static_baseline, track_realtime, track_sequence, variant_config,
 )
-from common.grouping import (
+from model.pogs.grouping import (
     ObjectGroups, assign_gt_ids, build_object_groups, cluster_purity, cluster_scene,
     group_gt_iou, match_clusters_to_gt, select_object_clusters, subset_groups,
 )
-from common.model import POGSModel
-from common.trainer import evaluate_views, precompute_features, train_pogs
-from scene_generator.pick_place_benchmark import (
+from model.pogs.model import POGSModel
+from model.pogs.trainer import evaluate_views, precompute_features, train_pogs
+from data.scene_generator.pick_place_benchmark import (
     FACTORS, OBJECT_NAMES, OBJECT_QUERIES, REALTIME_FPS, SCENE_VERSION, Case, dataset_scene_version, load_capture, load_case,
 )
 

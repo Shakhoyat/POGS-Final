@@ -19,7 +19,7 @@ import torch
 from .materials import specular_params, surface_color
 from .primitives import Primitive, BOX, ELLIPSOID, CYLINDER, euler_to_R
 from .objects import SceneObject
-from common.geometry import PinholeCamera
+from model.pogs.geometry import PinholeCamera
 
 
 # --------------------------------------------------------------------------- #

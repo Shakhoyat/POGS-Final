@@ -12,7 +12,7 @@ import time
 from experiments.pipeline import build_groups, run_suite, train_or_load, rescore_runs
 from experiments.v2_kalman_pogs.config import RESULTS_DIR, get_v2_config, v2_methods
 from experiments.visuals import make_dashboards
-from scene_generator.pick_place_benchmark import FACTORS, benchmark_cases
+from data.scene_generator.pick_place_benchmark import FACTORS, benchmark_cases
 
 
 def main(factors=None, device: str = "cuda:0", videos: bool = True):

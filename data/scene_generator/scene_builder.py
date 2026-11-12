@@ -22,7 +22,7 @@ from .objects import (
     jigsaw,
     wooden_shelf,
 )
-from common.geometry import PinholeCamera
+from model.pogs.geometry import PinholeCamera
 
 
 def build_scene(

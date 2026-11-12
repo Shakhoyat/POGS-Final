@@ -14,7 +14,7 @@ import time
 from experiments.pipeline import DATASET_DIR, MethodSpec, build_groups, run_suite, train_or_load, rescore_runs
 from experiments.v1_base_pogs.config import RESULTS_DIR, V1_ABLATIONS, V1_MAIN, get_v1_config
 from experiments.visuals import make_dashboards
-from scene_generator.pick_place_benchmark import FACTORS, N_SEEDS, Case, benchmark_cases, generate_benchmark
+from data.scene_generator.pick_place_benchmark import FACTORS, N_SEEDS, Case, benchmark_cases, generate_benchmark
 
 
 def main(force_train: bool = False, regen_data: bool = False, factors=None, device: str = "cuda:0",

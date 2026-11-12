@@ -61,3 +61,24 @@ model_checkpoints/*/
 logs/
 # Per-tile preview images (the contact sheet holds them all)
 data_results/scene_preview/tile_*.png
+
+# Foundation-model study: upstream trees, deps, weights and run outputs are not versioned
+model/foundation_study/*/POGS/
+model/foundation_study/*/outputs/
+model/foundation_study/deps/
+model/foundation_study/weights/*
+!model/foundation_study/weights/manifest.json
+model/foundation_study/inputs/*/img/
+model/foundation_study/inputs/*/depth*/
+model/foundation_study/inputs/*/obj_id/
+model/foundation_study/inputs/*/poses/
+model/foundation_study/**/*.ply
+model/foundation_study/**/clusters.npy
+
+# LaTeX build products
+*.aux
+*.out
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls

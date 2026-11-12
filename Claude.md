@@ -2,32 +2,32 @@
 
 ## Scope
 - Paper: *Persistent Object Gaussian Splat (POGS) for Tracking Human and Robot
-  Manipulation of Irregularly Shaped Objects*, ICRA 2025 (`2025-ICRA-POGS-CRv6.pdf`).
-- Reference code: `POGS-author-github/` (nerfstudio splatfacto + gsplat + warp).
+  Manipulation of Irregularly Shaped Objects*, ICRA 2025 (`docs/paper/2025-ICRA-POGS-CRv6.pdf`).
+- Reference code: `third_party/POGS-author-github/` (nerfstudio splatfacto + gsplat + warp).
 - In scope: scan -> train -> group -> track (Sec. IV-A..D). Out of scope: grasp
   planning (Contact-GraspNet), tool servoing, the physical robot.
 
 ## Ground rules
-1. `v1` = paper/release behaviour. Every default lives in `common/config.py`, with
+1. `v1` = paper/release behaviour. Every default lives in `model/pogs/config.py`, with
    the release source in each docstring. Change a default only to match the release.
 2. `v2`/`v3` may only add to v1 through configuration or the motion-prior hook of
-   `common.evaluate.track_sequence`. Never copy the tracking loop.
+   `model.pogs.evaluate.track_sequence`. Never copy the tracking loop.
 3. Ground truth is for evaluation only (`assign_gt_ids`, `match_clusters_to_gt`,
    `cluster_purity`). Never use it to build groups, select objects or initialise.
 4. Every result table must include the `Static (no motion)` baseline.
-5. A checkpoint is one file (`common/checkpoint.py`) and includes the DINO PCA
+5. A checkpoint is one file (`model/pogs/checkpoint.py`) and includes the DINO PCA
    basis. `DinoExtractor` refuses to run without a basis.
-6. Run `.venv/bin/python -m pytest -q tests` after touching `common/`.
+6. Run `.venv/bin/python -m pytest -q tests` after touching `model/pogs/`.
 
 ## Pipeline (what matches the release)
 | Stage | Release | Here |
 |---|---|---|
-| Training | splatfacto, 4000 steps, DINO from step 100, CLIP + grouping from 2500 | same (`common/trainer.py`); gsplat `DefaultStrategy` with splatfacto settings |
+| Training | splatfacto, 4000 steps, DINO from step 100, CLIP + grouping from 2500 | same (`model/pogs/trainer.py`); gsplat `DefaultStrategy` with splatfacto settings |
 | Grad accumulation | `{'color':10,'shs':10,'lerf':3}`, but only `lerf` matches a group name | `lerf: 3` only |
 | DINO | ViT-S/14, long side 1260, /10, PCA-64, per-Gaussian feature + 4-layer MLP | same; PCA saved in the checkpoint |
 | Grouping | Detic masks (+ negative mask), contrastive loss, cuML HDBSCAN | sim instance masks filtered like Detic (floor/table -> negative mask); sklearn HDBSCAN on a capped subsample (CPU budget) |
 | Object selection | interactive click, table removed below `table_z + 0.015` | geometric selection after the same support-plane cut; optional CLIP queries |
-| Tracking | ROI per object, DINO L2 + depth (3.7, ignore 0.26 m), Adam 0.004 -> 0.0008, 25 iters, MATCH_RESOLUTION 500, init 100 + 70 | same (`common/tracking.py`) |
+| Tracking | ROI per object, DINO L2 + depth (3.7, ignore 0.26 m), Adam 0.004 -> 0.0008, 25 iters, MATCH_RESOLUTION 500, init 100 + 70 | same (`model/pogs/tracking.py`) |
 
 ## Known deviations (intentional, documented)
 - Per-frame depth: the paper uses DINO + depth; the release's `step()` defaults to
@@ -42,7 +42,7 @@
 - Grouping masks keep the negative mask last. The release's random permutation
   can move it elsewhere, which looks like a bug.
 
-## Benchmark (`scene_generator/pick_place_benchmark.py`)
+## Benchmark (`data/scene_generator/pick_place_benchmark.py`)
 One 35-view capture of a floor scene (low table + mug, mustard bottle, soup can,
 apple, cereal box), one trained model, and many tracking conditions so a modified
 tracker can be compared with base POGS per condition. A robot gripper picks the
@@ -71,7 +71,7 @@ rate (> 10 cm); the paper's 3 cm / 5 deg rule is reported but saturates (~11%)
 because the gripper tilts the held object. `rescore_runs` back-fills new metrics
 into cached rows from their telemetry.
 
-Scene v2 (`SCENE_VERSION = 2`): procedural materials (`scene_generator/materials.py`:
+Scene v2 (`SCENE_VERSION = 2`): procedural materials (`data/scene_generator/materials.py`:
 grain, wood, two-tone labels, printed patches, tiles, brushed metal; roughness /
 metallic drive the specular). Textures are evaluated in each primitive's own frame;
 v1 evaluated them in world coordinates, so a moving object slid under a fixed
@@ -80,7 +80,7 @@ exactly at `TABLE_TOP_Z` (it was 6 mm higher, so placed objects sank into it) an
 moves the soup can and mug off the table footprint. Data, checkpoints and cached
 runs carry the version and are never mixed across versions.
 
-Real-time protocol (`common.evaluate.track_realtime`, `experiments/realtime/`): the
+Real-time protocol (`model.pogs.evaluate.track_realtime`, `experiments/realtime/`): the
 same trajectories rendered at 30 Hz. The tracker starts on frame 0 at t = 0 and
 each tracked frame costs its MEASURED compute time; when free it takes the newest
 frame and skips the rest (`pick_next_frame`); the Kalman prior predicts over the

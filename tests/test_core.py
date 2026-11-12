@@ -14,7 +14,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.geometry import (  # noqa: E402
+from model.pogs.geometry import (  # noqa: E402
     apply_group_deltas, identity_posevec, posevec_to_matrix, quat_to_rotmat, so3_exp,
 )
 
@@ -72,8 +72,8 @@ def test_apply_group_deltas_gradient():
 def test_pose_semantics_match_gt_convention():
     """Predicting the exact GT motion must give zero error: POGS's delta rotates
     about the scan centroid c and translates it, GT is x' = R x + t."""
-    from common.evaluate import gt_pose_for_group, rotation_error_deg, translation_error_cm
-    from common.tracking import RigidGroupOptimizer  # noqa: F401  (import check)
+    from model.pogs.evaluate import gt_pose_for_group, rotation_error_deg, translation_error_cm
+    from model.pogs.tracking import RigidGroupOptimizer  # noqa: F401  (import check)
 
     c = np.array([-0.08, -0.06, 0.05])
     R = quat_to_rotmat(so3_exp(torch.tensor([[0.0, 0.0, 0.7]], dtype=torch.float64)))[0].numpy()
@@ -99,10 +99,10 @@ def test_pose_semantics_match_gt_convention():
 
 
 def test_dino_extractor_refuses_without_pca_and_checkpoint_roundtrip(tmp_path):
-    from common.checkpoint import load_checkpoint, save_checkpoint
-    from common.config import POGSConfig
-    from common.encoders import DinoExtractor
-    from common.model import POGSModel
+    from model.pogs.checkpoint import load_checkpoint, save_checkpoint
+    from model.pogs.config import POGSConfig
+    from model.pogs.encoders import DinoExtractor
+    from model.pogs.model import POGSModel
 
     dino = DinoExtractor(device="cpu", allow_download=False)
     with pytest.raises(RuntimeError):
@@ -126,7 +126,7 @@ def test_dino_extractor_refuses_without_pca_and_checkpoint_roundtrip(tmp_path):
 
 
 def test_kalman_constant_velocity():
-    from common.kalman import KalmanConfig, MultiObjectKalman
+    from model.pogs.kalman import KalmanConfig, MultiObjectKalman
 
     kf = MultiObjectKalman(1, KalmanConfig(meas_pos_std=1e-4, meas_rot_std=1e-4))
     kf.initialize(torch.tensor([[0, 0, 0, 1, 0, 0, 0.0]]))
@@ -141,7 +141,7 @@ def test_kalman_constant_velocity():
 
 
 def test_build_masks_negative_last_and_background_excluded():
-    from common.trainer import build_masks
+    from model.pogs.trainer import build_masks
 
     ids = torch.zeros(40, 40, dtype=torch.long)
     ids[5:15, 5:15] = 1
@@ -154,7 +154,7 @@ def test_build_masks_negative_last_and_background_excluded():
 
 
 def test_dbscan_keeps_every_surface():
-    from scene_generator.capture_generator import dbscan_filter
+    from data.scene_generator.capture_generator import dbscan_filter
 
     rng = np.random.default_rng(0)
     blobs = [rng.normal(loc=(i * 0.5, 0, 0), scale=0.005, size=(200, 3)) for i in range(8)]
@@ -165,8 +165,8 @@ def test_dbscan_keeps_every_surface():
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 def test_torch_and_gsplat_rasterisers_agree():
-    from common.geometry import PinholeCamera, look_at
-    from common.raster import gsplat_available, rasterize
+    from model.pogs.geometry import PinholeCamera, look_at
+    from model.pogs.raster import gsplat_available, rasterize
 
     if not gsplat_available():
         pytest.skip("gsplat unavailable")
@@ -190,7 +190,7 @@ def test_torch_and_gsplat_rasterisers_agree():
 def test_benchmark_trajectory_and_cases():
     """Placed object ends upright on the table at the sampled point; tilt
     returns to upright; cases are unique and every factor has the base case."""
-    import scene_generator.pick_place_benchmark as b
+    import data.scene_generator.pick_place_benchmark as b
 
     cfg = b.BenchmarkConfig()
     objs = b.build_pick_place_scene()
@@ -214,7 +214,7 @@ def test_benchmark_trajectory_and_cases():
 
 
 def test_degrade_depth_deterministic():
-    from scene_generator.pick_place_benchmark import degrade_depth
+    from data.scene_generator.pick_place_benchmark import degrade_depth
 
     d = np.full((200, 300), 0.8, np.float32)
     d[:20] = 0.0
@@ -229,7 +229,7 @@ def test_degrade_depth_deterministic():
 
 def test_kalman_damping_and_speed_limit():
     """Without fresh evidence the velocity decays; it is never above the cap."""
-    from common.kalman import KalmanConfig, SE3KalmanFilter
+    from model.pogs.kalman import KalmanConfig, SE3KalmanFilter
 
     f = SE3KalmanFilter(KalmanConfig(dt=0.2, vel_damping_tau=1.0, max_speed=0.5))
     f.initialize(np.array([0, 0, 0, 1, 0, 0, 0.0]))
@@ -251,9 +251,9 @@ def test_kalman_damping_and_speed_limit():
 def test_texture_moves_with_object():
     """Textures are evaluated in the primitive's own frame (the first generator
     used world coordinates, so moving objects slid under a fixed pattern)."""
-    from scene_generator.materials import surface_color
-    from scene_generator.pick_place_scene import build_pick_place_scene
-    from scene_generator.scene_builder import FlatScene
+    from data.scene_generator.materials import surface_color
+    from data.scene_generator.pick_place_scene import build_pick_place_scene
+    from data.scene_generator.scene_builder import FlatScene
 
     sc = FlatScene(build_pick_place_scene())
     for oid in (1, 3, 4, 5):                                  # mug, soup, apple, cereal
@@ -271,7 +271,7 @@ def test_texture_moves_with_object():
 def test_scene_layout_no_overlap():
     """Table top exactly at TABLE_TOP_Z; floor objects clear of the table
     footprint and of each other (the soup can used to sit inside the table)."""
-    import scene_generator.pick_place_benchmark as b
+    import data.scene_generator.pick_place_benchmark as b
 
     objs = b.build_pick_place_scene()
     table = next(o for o in objs if o.obj_id == b.TABLE_ID)
@@ -282,7 +282,7 @@ def test_scene_layout_no_overlap():
 
     def footprint(o, n=24):
         """Top-down points covering every primitive of ``o`` (world xy)."""
-        from scene_generator.primitives import BOX, euler_to_R
+        from data.scene_generator.primitives import BOX, euler_to_R
         c, sn = np.cos(o.yaw), np.sin(o.yaw)
         Ro = np.array([[c, -sn, 0], [sn, c, 0], [0, 0, 1.0]])
         g = np.linspace(-1, 1, n)
@@ -310,7 +310,7 @@ def test_scene_layout_no_overlap():
 
 def test_realtime_sequences_share_trajectories():
     """Frame 6k of the 30 Hz rendering is frame k of the 5 Hz one."""
-    import scene_generator.pick_place_benchmark as b
+    import data.scene_generator.pick_place_benchmark as b
 
     cfg = b.BenchmarkConfig()
     rt = b.realtime_config(cfg)
@@ -328,7 +328,7 @@ def test_realtime_sequences_share_trajectories():
 
 
 def test_pick_next_frame_and_sources():
-    from common.evaluate import estimate_sources, pick_next_frame
+    from model.pogs.evaluate import estimate_sources, pick_next_frame
 
     ts = np.arange(10) / 10.0                                  # 10 Hz camera
     assert pick_next_frame(ts, 0.0, -1) == 0
@@ -340,7 +340,7 @@ def test_pick_next_frame_and_sources():
 
 
 def test_kalman_variable_dt_and_extrapolate():
-    from common.kalman import KalmanConfig, SE3KalmanFilter
+    from model.pogs.kalman import KalmanConfig, SE3KalmanFilter
 
     cfg = KalmanConfig(dt=0.2, vel_damping_tau=0.0, max_speed=0.0, max_ang_speed=0.0)
     a, b2 = SE3KalmanFilter(cfg), SE3KalmanFilter(cfg)
@@ -366,7 +366,7 @@ def test_track_realtime_with_fake_tracker(monkeypatch):
     tracker frees up; 9 would finish after the stream ends), and every camera
     frame is scored on the last estimate finished by then."""
     import types
-    import common.evaluate as ev
+    import model.pogs.evaluate as ev
 
     class FakeTracker:
         def __init__(self, *a, **k):

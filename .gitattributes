@@ -1,0 +1,14 @@
+# Code and docs run under Linux/WSL: keep LF everywhere.
+* text=auto eol=lf
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.gif  binary
+*.mp4  binary
+*.npy  binary
+*.npz  binary
+*.pt   binary
+*.pth  binary
+
+# Imported evidence archive and patches: keep byte-identical (md5 in MANIFEST.md; patches need exact EOLs)
+model/foundation_study/** -text

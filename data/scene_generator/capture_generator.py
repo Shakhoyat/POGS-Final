@@ -17,7 +17,7 @@ import torch
 
 from .scene_builder import FlatScene, render_scene, deproject
 from .objects import SceneObject
-from common.geometry import PinholeCamera, look_at
+from model.pogs.geometry import PinholeCamera, look_at
 
 
 @dataclass

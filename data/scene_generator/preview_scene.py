@@ -2,7 +2,7 @@
 Scene preview: render a handful of frames with the real generator code and tile
 them into one contact sheet, to review the scene before a full generation.
 
-    python -m scene_generator.preview_scene [--device cpu] [--scale 1.0]
+    python -m data.scene_generator.preview_scene [--device cpu] [--scale 1.0]
 
 Writes ``data_results/scene_preview/contact_sheet.png`` (+ the single frames).
 Rows: two scan views and a depth map; tracking frames of ``base`` at the
@@ -20,11 +20,11 @@ import cv2
 import numpy as np
 import torch
 
-from scene_generator.capture_generator import hemisphere_trajectory
-from scene_generator.photoreal_scene import render_photoreal_scene
-from scene_generator.pick_place_benchmark import BenchmarkConfig, generate_sequence
-from scene_generator.pick_place_scene import build_pick_place_scene
-from scene_generator.scene_builder import FlatScene
+from data.scene_generator.capture_generator import hemisphere_trajectory
+from data.scene_generator.photoreal_scene import render_photoreal_scene
+from data.scene_generator.pick_place_benchmark import BenchmarkConfig, generate_sequence
+from data.scene_generator.pick_place_scene import build_pick_place_scene
+from data.scene_generator.scene_builder import FlatScene
 
 OUT_DIR = "data_results/scene_preview"
 

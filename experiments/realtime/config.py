@@ -4,7 +4,7 @@ Real-time protocol: does a faster tracker win once the camera does not wait?
 Offline benchmarks track every frame however long it takes. Here the camera
 streams at 30 Hz (``REALTIME_FPS``); the tracker always takes the newest frame
 once it is free, skipping the rest, and is scored at EVERY camera frame on the
-pose it had published by then (``common.evaluate.track_realtime``). Compute
+pose it had published by then (``model.pogs.evaluate.track_realtime``). Compute
 time is measured, so a slow tracker pays twice: larger motion between the
 frames it sees, and staler output. Run on an otherwise idle GPU.
 

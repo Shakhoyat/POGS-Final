@@ -13,7 +13,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from scene_generator.pick_place_benchmark import FACTORS, SCENE_VERSION
+from data.scene_generator.pick_place_benchmark import FACTORS, SCENE_VERSION
 
 RUNS = "data_results/benchmark_runs"
 FACTOR_METHODS = ["Static (no motion)", "POGS", "POGS (release: no per-frame depth)", "POGS + KF",
