@@ -1,0 +1,63 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Large Model Checkpoints (>100MB exceeds GitHub limits, e.g. pogs_fields.pt 137MB)
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Scratch, Temporary & Cache directories
+scratch/
+tmp/
+temp/
+*.tmp
+*.log
+.cache/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Generated data (regenerate with the scripts in scene_generator/ and experiments/)
+datasets/synthetic_scenes/
+model_checkpoints/*/
+
+# Local run logs and one-off job scripts
+logs/
+# Per-tile preview images (the contact sheet holds them all)
+data_results/scene_preview/tile_*.png

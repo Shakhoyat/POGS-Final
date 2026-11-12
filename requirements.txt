@@ -1,0 +1,17 @@
+# POGS re-implementation -- Linux, NVIDIA GPU (tested: RTX 4070, torch 2.14 + CUDA 13.0, Python 3.14)
+torch
+torchvision
+numpy>=1.24.0
+scipy>=1.10.0
+scikit-learn>=1.3.0        # HDBSCAN (sklearn.cluster.HDBSCAN)
+pandas>=2.0.0
+matplotlib>=3.7.0
+imageio>=2.30.0
+imageio-ffmpeg>=0.4.8
+open_clip_torch>=2.20.0
+timm>=0.9.0
+opencv-python-headless>=4.8.0
+tabulate>=0.9.0
+gsplat==1.5.3              # CUDA kernels JIT-built by tools/setup_gsplat.sh
+ninja
+pytest
