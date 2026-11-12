@@ -1,74 +1,68 @@
-# Persistent Object Gaussian Splatting (POGS) -- re-implementation
+# POGS-Final
 
-Re-implementation of **Persistent Object Gaussian Splat (POGS) for Tracking Human
-and Robot Manipulation of Irregularly Shaped Objects** (Yu, Hari, El-Refai et al.,
-ICRA 2025), validated on a synthetic robot pick-and-place benchmark with exact
-ground truth.
+Consolidated research repository for **Persistent Object Gaussian Splatting (POGS)**
+(Yu, Hari, El-Refai *et al.*, ICRA 2025): a faithful re-implementation with a synthetic
+pick-and-place benchmark, a real-time tracking study, and a 2D foundation-model
+substitution study.
 
-`v1` follows the paper and the authors' release (`POGS-author-github/`) as closely
-as possible; `v2` and `v3` are built strictly on top of it. Grasp planning and tool
-servoing are out of scope.
+Start with the supervisor report: [`report/supervisor/main.tex`](report/supervisor/main.tex).
 
 ## Layout
 
 ```
-common/            POGS library: config (release defaults), model, gsplat/torch
-                   rasteriser, feature field, encoders, losses, trainer,
-                   HDBSCAN grouping, rigid-group tracker, SE(3) Kalman filter,
-                   checkpoints, the shared tracking loop + metrics
-scene_generator/   synthetic scenes; pick_place_benchmark.py builds the benchmark
-                   (12 conditions x 3 seeds, + speed / depth-noise at load time,
-                   + 30 Hz renderings for the real-time protocol);
-                   materials.py: object-local procedural textures;
-                   preview_scene.py: contact sheet to review the scene (CPU ok)
-experiments/
-  pipeline.py      train -> group -> track -> report (shared by all versions)
-  visuals.py       dashboard videos (camera | overlay | raw scene splats | raw
-                   object splats, with a compute-time / latency overlay)
-  v1_base_pogs/    base POGS (paper and release settings) + the paper's ablations
-  v2_kalman_pogs/  v1 + constant-velocity SE(3) Kalman motion prior (+ iteration sweep)
-  v3_scene_mustard/ object and multi-object factors (folder name kept for history)
-  realtime/        real-time protocol: 30 Hz camera, the tracker skips frames it
-                   is too slow for and is scored on its published (stale) pose
-report/            LaTeX report (main.tex -> main.pdf; make_figures.py rebuilds the
-                   figures from the cached runs; compile with tectonic or pdflatex)
-tests/             regression tests (pose maths, PCA persistence, metrics, ...)
-tools/             gsplat CUDA setup without sudo
-legacy/            unmaintained notebook-era modules (grasping, servoing, old generator)
+model/
+  pogs/               POGS library: model, gsplat/torch rasteriser, feature field, encoders,
+                      losses, trainer, HDBSCAN grouping, rigid-group tracker, SE(3) Kalman
+                      filter, checkpoints, shared tracking loop + metrics (evaluate.py)
+  foundation_study/   detection / visual-feature / feature-alignment model study
+                      (Detic, LocateAnything3D, RF-DETR, VFM-DETR, YOLO; DINOv2, DINOv3,
+                      dino.txt; CLIP, MobileCLIPv2, SigLIP2): code, patches, results archive
+data/
+  scene_generator/    synthetic scenes and the 54-case pick-and-place benchmark
+experiments/          v1 base POGS, v2 Kalman prior, v3 objects, real-time protocol
+tests/                regression tests
+report/
+  supervisor/         consolidated progress report (LaTeX) + figure script
+  reproduction/       detailed report of the re-implementation
+docs/                 paper, results (RESULTS_reproduction.md), audit history (JOURNEY.md)
+third_party/          authors' release (POGS-author-github), exploratory notebooks
+legacy/               unmaintained pre-audit modules (results there were retracted)
+tools/                gsplat CUDA build without sudo
+datasets/ model_checkpoints/ data_results/   generated data, checkpoints and cached runs
 ```
 
-## Setup
+## Setup (Linux / WSL2, NVIDIA GPU)
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-tools/setup_gsplat.sh        # builds gsplat's CUDA kernels inside .venv (no sudo)
+tools/setup_gsplat.sh                 # builds gsplat's CUDA kernels inside .venv
 .venv/bin/python -m pytest -q tests
 ```
-
-Without gsplat everything still runs on a pure-PyTorch rasteriser, but about two
-orders of magnitude slower, and densification is only approximate.
 
 ## Run
 
 ```bash
-.venv/bin/python -m scene_generator.preview_scene         # optional: review the scene first (CPU, ~25 s)
-.venv/bin/python -m experiments.v1_base_pogs.run_all      # data (if missing), train, group, track, videos
-.venv/bin/python -m experiments.v2_kalman_pogs.run_all    # reuses the v1 checkpoint and runs
-.venv/bin/python -m experiments.v3_scene_mustard.run_all  # reuses the v1 checkpoint and runs
-.venv/bin/python -m experiments.realtime.run_all          # renders the 30 Hz sequences if missing; idle GPU!
-.venv/bin/python -m experiments.results_tables > tables.md  # compact tables used in RESULTS.md (CPU)
-# v1-v3: --factors rotation speed occlusion depth object multi-object
+.venv/bin/python -m data.scene_generator.preview_scene     # review the scene (CPU)
+.venv/bin/python -m experiments.v1_base_pogs.run_all       # data, train, group, track, videos
+.venv/bin/python -m experiments.v2_kalman_pogs.run_all
+.venv/bin/python -m experiments.v3_scene_mustard.run_all
+.venv/bin/python -m experiments.realtime.run_all           # needs an idle GPU
+.venv/bin/python -m experiments.results_tables > tables.md
 ```
 
-The scene has a version (`SCENE_VERSION` in `pick_place_benchmark.py`): data,
-checkpoints and cached runs from another version are re-rendered / retrained /
-re-run automatically instead of being mixed with new ones.
+The foundation-model study runs per row: `cd model/foundation_study/<row> && bash run.sh`
+(see `model/foundation_study/README.md` and `MERGE_NOTES.md`).
 
-Outputs: `model_checkpoints/pick_place_floor_table/` (one self-contained
-checkpoint, including the DINO PCA basis), `data_results/benchmark_runs/` (every
-run, shared and resumable) and `data_results/<version>/` (`summary.md` with one
-table per benchmark factor, `summary.csv`, `videos/`).
+## Status
 
-See [RESULTS.md](RESULTS.md) for numbers, [JOURNEY.md](JOURNEY.md) for the audit
-history, and [Claude.md](Claude.md) for implementation notes and deviations from
-the release.
+| Objective | Status |
+|---|---|
+| POGS re-implementation, scene generation, pose metrics | done |
+| Object-grouping visuals | partial (object-only splats; with/without comparison missing) |
+| 2D foundation-model latency | partial (VFM-DETR has no public weights) |
+| 5 Hz tracking | partial (1.9 Hz at 25 iterations, 4.4 Hz at 10) |
+| Tool perturbation recovery (30 deg, KL divergence) | not started |
+| In-grasp recovery rate (80 %) | not started |
+| Python 3.12 / CUDA 13.0 / PyTorch 2.14 | partial |
+
+Details and the work plan: `report/supervisor/main.tex`.
