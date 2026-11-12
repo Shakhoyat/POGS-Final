@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from experiments.env_info import write_env_json
 from model.pogs.checkpoint import checkpoint_exists, load_checkpoint, save_checkpoint, write_json
 from model.pogs.config import POGSConfig
 from model.pogs.encoders import DinoExtractor, OpenCLIPNetwork
@@ -219,6 +220,7 @@ def run_suite(
     operator clicks the object to follow (Sec. IV-C); ``track_all`` tracks
     every selected object instead and reports the drift of the static ones."""
     os.makedirs(out_dir, exist_ok=True)
+    write_env_json(out_dir)
     all_groups, all_g2gt = grouping.groups, grouping.group_to_gt
     groups, g2gt = all_groups, all_g2gt
     mp_all = mp = object_model_points(all_groups, model)
@@ -252,6 +254,7 @@ def run_suite(
                 res = track_sequence(model, groups, seq, dino, cfg, g2gt, name=m.name,
                                      tracking_cfg=tc, model_points=mp, motion_prior=prior, verbose=verbose)
             os.makedirs(run_dir, exist_ok=True)
+            write_env_json(run_dir)
             write_json(os.path.join(run_dir, "telemetry.json"), res.telemetry())
             np.save(os.path.join(run_dir, "part_deltas.npy"), res.part_deltas)
             row = {"case": case.name, "condition": case.condition, "seed": case.seed, "speed": case.speed,
@@ -318,6 +321,7 @@ def run_realtime_suite(
     A method with a motion prior adds a ``<name> + latency comp.`` row from
     the same run. Target-only protocol, as in ``run_suite``."""
     os.makedirs(out_dir, exist_ok=True)
+    write_env_json(out_dir)
     all_groups, all_g2gt = grouping.groups, grouping.group_to_gt
     mp_all = object_model_points(all_groups, model)
     rows = []
@@ -358,6 +362,7 @@ def run_realtime_suite(
             for n, res, proc, rt in outs:
                 run_dir = os.path.join(runs_dir, case.name, _slug(n))
                 os.makedirs(run_dir, exist_ok=True)
+                write_env_json(run_dir)
                 write_json(os.path.join(run_dir, "telemetry.json"), res.telemetry())
                 np.save(os.path.join(run_dir, "part_deltas.npy"), res.part_deltas)
                 row = {**base, "method": n, **_prefix(res.summary(0), "")}

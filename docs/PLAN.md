@@ -1,115 +1,170 @@
-# Execution plan: supervisor requirements → final report
+# Execution plan: supervisor requirements → final report → paper
 
 Owner: Md.Shakhoyat Rahman Shujon (first author). Working copy: `E:\POGS-Final\POGS-Final`
-(WSL: `/mnt/e/POGS-Final/POGS-Final`). Status as of 2026-11-13; tick boxes as steps finish.
+(WSL: `/mnt/e/POGS-Final/POGS-Final`). Revised 2026-11-13 after re-reading
+`Robotic-Manipulation-v1-requirement-supervisor.pdf` against the repository. Tick boxes as steps finish.
 
-## Ground rules (applied to every step and to the final report)
+## 1. Requirement → current state (verified 2026-11-13)
 
-1. **Report what happened, not what we hoped.** Negative and null results go in the report,
-   with the same prominence as positive ones.
-2. **Every number is regenerable.** Each table and figure comes from a script in this repo,
-   reading cached results under `data_results/` or `model/foundation_study/artefacts/`. No
-   hand-typed numbers in `main.tex` except paper reference values (marked as such).
-3. **Baselines and spread.** Every table has the `Static (no motion)` baseline; every mean has
-   a seed std or a 95% interval. At least 3 seeds per stochastic condition, 5 where we claim a
-   difference between methods.
-4. **Like with like.** No comparison of our simulation numbers with the paper's physical-robot
-   numbers. Speed claims compare equal iteration budgets.
-5. **Disclose deviations.** Anything that differs from the paper, the release or the brief is
-   listed (see `Claude.md` "Known deviations") and repeated in the report.
-6. **Credit.** Per-path authorship in `CONTRIBUTIONS.md`; new work is committed under the first author.
-7. **Environment recorded.** Python / CUDA / PyTorch / GPU / driver printed into every result file.
+| ID | Supervisor requirement | Target | State in repo | Gap |
+|---|---|---|---|---|
+| O1 | Splats with / without one object; check that the group really holds that object's Gaussians | qualitative + quantitative | HDBSCAN grouping, per-object IoU 0.67–0.98; object-only renders in dashboard videos | No scene-minus-object render, no metric, soup can weak (0.67) |
+| O2 | Structure: **Model** (detection, feature extraction, alignment, POGS), **Data** (scene generation), **Metrics** (Gaussian, Pose); Python 3.12, CUDA 13.0, PyTorch 2.14 + torchmetrics | layout + env | `model/pogs`, `model/foundation_study`, `data/scene_generator` exist | **No `metrics/` package** (pose metrics live in `model/pogs/evaluate.py`, grouping metrics in `grouping.py`); no Gaussian metrics; no torchmetrics; `.venv` absent; system Python is 3.14, no 3.12; workstream B on torch 2.6/cu118 |
+| O3 | Tool perturbation, recovery angle 30°: x → +5,+10,… (p) → −5,−10,… back (y); compare splats y vs x, same for pose; KL divergence | 30° | Drill object + `tool_tip_frame` exist in `data/scene_generator/objects.py`; only retracted `legacy/servoing.py` | Trajectory, KL metric, experiment all missing |
+| O4 | In-grasp tool perturbation recovery rate | 80 % | — | Grasp-perturbation scene, trials, rate with CI |
+| O5 | Latency of every 2D model in the table (Detic, LocateAnything3D, RF-DETR, VFM-DETR, YOLO / DINOv2, dino.txt, DINOv3 / CLIP, MobileCLIPv2, SigLIP2) | per model | 7 models benchmarked standalone (fp32/fp16/VRAM) on torch 2.6/cu118 | Detic and SigLIP2 only from logs; LocateAnything3D own harness; VFM-DETR no weights; not on target stack; no per-stage time inside the tracker |
+| O6 | Tracking frequency | 5 Hz | 1.9 Hz (25 it), 4.4 Hz (10 it), 7.1 Hz (5 it) | No setting reaches 5 Hz at useful accuracy |
 
-## Phase 0: Foundation (environment and sanity), ~2 days
+## 2. Research-integrity issues to settle before running anything
 
-- [ ] 0.1 Create `.venv` in WSL with **Python 3.12**, PyTorch 2.14, CUDA 13.0
-      (`requirements.txt`; build gsplat with `tools/setup_gsplat.sh`).
-- [ ] 0.2 `pytest -q tests`: all 17 must pass after the Model/Data restructure.
-- [ ] 0.3 Regenerate the benchmark data (`python -m experiments.v1_base_pogs.run_all`); it retrains
-      the checkpoint (not in git). Confirm PSNR ≈ 34.1 dB and grouping IoU within ±0.03 of
-      `docs/RESULTS_reproduction.md`. If they differ, record by how much and why.
-- [ ] 0.4 Add `env.json` (versions, GPU, driver) to every run directory.
+These are the points a strict A*/Q1 reviewer would raise. Each one has a decision recorded here.
 
-**Exit:** tests green; base case reproduces 100% ADD-S success at 25 iterations.
+1. **Index-matched KL is the pose error in another form.** POGS moves each group rigidly, so
+   KL(N(μᵢˣ,Σᵢˣ) ‖ N(μᵢʸ,Σᵢʸ)) over the same index i is a deterministic function of the residual
+   rigid transform. It adds no evidence beyond pose error. *Decision:* report it (it is what the
+   supervisor asked for, and it is covariance-aware), state this equivalence explicitly, and add
+   one KL that is **independent of ground truth**: the KL between the rendered and observed
+   per-pixel feature/colour distributions inside the object ROI. That second KL can serve as a
+   recovery-confidence signal without GT, which is a possible contribution.
+2. **Step-wise ±5° is easier than the paper's test.** The paper perturbs by a sudden 15°/30° jump
+   (Table II). *Decision:* run both the step-wise protocol (supervisor) and the single-jump
+   protocol (paper), and label each.
+3. **Targets come from a physical robot.** 30°, 80 % and 48/50 / 40/50 are real-robot numbers.
+   Our results are synthetic. *Decision:* show the paper's values as reference only, never as a
+   head-to-head comparison.
+4. **Pre-register the protocols.** Success thresholds, number of trials, seeds, frames allowed for
+   recovery and the analysis (Wilson CI) go into `experiments/protocols/*.md`, which is committed
+   **before** the first run. Any later change is logged with its reason.
+5. **Ground truth for evaluation only** (`Claude.md` rule 3): grouping, selection and initialisation
+   never read GT.
+6. **Workstream B accuracy numbers are not usable**: n = 1, unseeded, `lost@N` cells, and rows 01/02
+   ran the baseline models (report Table "Study matrix"). Use B for latency only, unless rows are re-run.
+7. **Retracted results stay retracted.** Nothing from `legacy/` is cited.
+8. **Novelty.** A re-implementation plus a synthetic benchmark is unlikely to be enough for A*/Q1.
+   Candidate contributions, to agree with the supervisor (see §5):
+   (a) latency-aware real-time evaluation of POGS with Kalman prior + latency compensation that
+   reaches 5 Hz; (b) GT-free splat-consistency (KL) signal for detecting and recovering lost tracks;
+   (c) controlled benchmark of POGS failure modes (rotation, speed, occlusion, depth, shape);
+   (d) foundation-model substitution cost/capability analysis. Most robotics venues will also
+   expect **at least one real-world sequence**.
+9. **Credit.** Md Nayeem (workstream A) and Dadhichi (workstream B) wrote most of the existing
+   code (`CONTRIBUTIONS.md`); authorship of the report and paper must reflect that.
 
-## Phase 1: O1 object-grouping splats (with / without object), ~2 days
+## 3. Ground rules (every step, every table)
 
-- [ ] 1.1 `metrics/gaussian.py`: render full / scene-minus-object / object-only for each cluster
+1. Report what happened. Negative and null results get the same prominence as positive ones.
+2. Every number is regenerable from a script reading cached results; no hand-typed numbers in
+   `main.tex` except paper reference values, marked as such.
+3. Every table has the `Static (no motion)` baseline; every mean has a seed std or 95 % CI;
+   ≥ 3 seeds per condition, ≥ 5 where a difference between methods is claimed; rates get Wilson CIs.
+4. Like with like: equal iteration budgets for speed claims; no sim vs real comparisons.
+5. Deviations from paper, release or brief are listed (`Claude.md` "Known deviations") and repeated in the report.
+6. `env.json` (Python, CUDA, PyTorch, GPU, driver, git SHA) is written into every result directory.
+7. `.venv/bin/python -m pytest -q tests` after every change to `model/pogs/` or `metrics/`.
+
+## 4. Phases
+
+### Phase 0: Environment and structure (O2), ~2 days
+- [ ] 0.1 Install Python 3.12 (`uv python install 3.12` or deadsnakes), create `.venv`, install
+      PyTorch 2.14 + CUDA 13.0 wheels, `torchmetrics`, then `requirements.txt`; build gsplat
+      (`tools/setup_gsplat.sh`). Update the `requirements.txt` header (it currently says Python 3.14).
+- [ ] 0.2 `pytest -q tests`: all 17 pass.
+- [ ] 0.3 Create `metrics/` with `metrics/pose.py` (ADD, ADD-S, translation/rotation error, success
+      rates, moved from `model/pogs/evaluate.py` and re-exported there so nothing breaks) and
+      `metrics/gaussian.py` (Phase 1–2). Use `torchmetrics` for PSNR/SSIM/LPIPS. Tests in `tests/test_metrics.py`.
+- [ ] 0.4 Regenerate the benchmark (`python -m experiments.v1_base_pogs.run_all`); confirm PSNR
+      ≈ 34.1 dB and grouping IoU within ±0.03 of `docs/RESULTS_reproduction.md`. Record any difference.
+- [ ] 0.5 `env.json` writer in `experiments/pipeline.py`.
+
+**Exit:** Python 3.12 / CUDA 13.0 / PyTorch 2.14 env, tests green, base case reproduces 100 % ADD-S success.
+
+### Phase 1: O1 splats with / without object, ~2 days
+- [ ] 1.1 `metrics/gaussian.py`: render (a) full scene, (b) scene minus group k, (c) group k only,
       from the 35 capture views.
-- [ ] 1.2 Metrics per object: alpha IoU vs GT mask; **leakage** (object-only opacity outside the
-      GT mask); PSNR of scene-minus-object vs a GT render without the object (the generator can
-      produce that render).
-- [ ] 1.3 Figure: 5 objects × 3 renders. Table: IoU / leakage / PSNR per object.
-- [ ] 1.4 Explain the residual red patch seen at the mug's scan position (dashboard figure).
+- [ ] 1.2 Per object: alpha IoU of (c) vs GT mask; leakage = opacity of (c) outside the GT mask;
+      completeness = GT-mask pixels not covered by (c); PSNR/SSIM of (b) vs a GT render of the scene
+      without the object (generator renders it); count of object Gaussians assigned to other groups
+      (via `assign_gt_ids`, evaluation only).
+- [ ] 1.3 Figure 5 objects × 3 renders; table of the metrics with 3 training seeds.
+- [ ] 1.4 Explain the residual red patch at the mug's scan position and the soup can's 0.67 IoU.
 
-**Exit:** table + figure for all 5 objects; soup can (IoU 0.67) discussed honestly.
+**Exit:** figure + table for all 5 objects, failures explained.
 
-## Phase 2: O3 tool perturbation recovery to 30° (splats + pose + KL), ~4 days
+### Phase 2: O3 perturbation recovery to 30° (splats + pose + KL), ~4 days
+- [ ] 2.1 Send the supervisor the questions in §5 and write `experiments/protocols/o3.md`; commit before running.
+- [ ] 2.2 Generator: extend `object_frame` beyond yaw (it is yaw-only today) so the drill can rotate
+      about any axis; trajectories (i) step-wise 0 → +5 → … → +30 (p) → … → 0 (y), hold h frames per
+      step; (ii) single jump 0 → ±15 / ±30 → hold. 5 Hz, static camera, axes: tool vertical, plus one horizontal.
+- [ ] 2.3 `metrics/gaussian.py::kl_gaussians(x, y)`: opacity-weighted mean KL over matched Gaussians
+      (formula in `report/supervisor/main.tex` §Remaining work); unit tests: identity → 0, pure
+      translation → closed form, symmetry check of the symmetrised variant.
+- [ ] 2.4 `metrics/gaussian.py::kl_render(obs, render)`: GT-free KL between observed and rendered
+      feature/colour histograms in the ROI; test that it rises when the object is lost.
+- [ ] 2.5 Per step: position error, rotation error, ADD-S, KL(x_gt-posed ‖ tracked), KL_render;
+      final KL(x ‖ y). Sweep step size 5/10/15° and find the largest angle that still recovers.
+- [ ] 2.6 Methods: Static, POGS (paper, release), POGS + KF + check; 5 seeds.
 
-- [ ] 2.1 Confirm the protocol with the supervisor before running (one message): step size 5°,
-      axis (tool's own vertical?), hold time per step, and which KL (we propose the per-Gaussian
-      Gaussian-to-Gaussian KL below).
-- [ ] 2.2 Scene: add a tool object (drill-like, asymmetric) to `data/scene_generator/`; trajectory
-      0 → +5 → … → +30 (state *p*) → … → 0 (state *y*), static camera, 5 Hz.
-- [ ] 2.3 `metrics/gaussian.py::kl_divergence(x, y)`: opacity-weighted mean of
-      KL(N(μ_x, Σ_x) ‖ N(μ_y, Σ_y)) over corresponding Gaussians (same indices; rigid groups).
-      Unit tests: identity → 0; known translation → closed form.
-- [ ] 2.4 Report, per step: position error, rotation error, ADD-S, and KL(x‖current); final KL(x‖y).
-      Also the largest step size that still recovers (sweep 5 / 10 / 15°).
-- [ ] 2.5 Methods: POGS and POGS + KF + check, 3 seeds each.
+**Exit:** error/KL vs commanded angle (out and back), recovery verdict per method with CI.
 
-**Exit:** curve of error and KL vs commanded angle, there and back; numeric recovery verdict.
+### Phase 3: O4 in-grasp recovery rate (target 80 %), ~3 days
+- [ ] 3.1 `experiments/protocols/o4.md` (pre-registered): ±15°, ±30°, CW/CCW, 50 trials per setting,
+      random start pose + seed, success = tool tip within 3 cm and 5° of GT within N frames (N fixed now).
+- [ ] 3.2 Gripper holds the drill (benchmark gripper, scale for the drill); perturb in grasp.
+- [ ] 3.3 Rate + Wilson 95 % CI per method; verdict "met" / "not met" / "inconclusive (CI spans 80 %)".
+      Paper's 48/50 and 40/50 as reference only.
 
-## Phase 3: O4 in-grasp recovery rate (target 80%), ~3 days
+**Exit:** 4 settings × methods table.
 
-- [ ] 3.1 Gripper holds the tool; perturb in-grasp by ±15° and ±30° (CW/CCW), as in paper Table II.
-- [ ] 3.2 50 trials per setting (randomised start pose and seed). Success = tool tip within
-      3 cm and 5° of GT within N frames after the perturbation (N fixed in advance and stated).
-- [ ] 3.3 Recovery rate with Wilson 95% interval, per method. Compare with 80% honestly:
-      "met", "not met", or "inconclusive (CI spans 80%)".
+### Phase 4: O6 5 Hz tracking, ~3 days
+- [ ] 4.1 Per-stage profile of one step (DINO forward, render, backward, optimiser, ROI crop).
+- [ ] 4.2 Candidates on all 54 offline cases + 30 Hz protocol: fp16/bf16 DINO, `torch.compile`,
+      smaller MATCH_RESOLUTION, 10–15 iterations + KF latency compensation, early stopping on loss
+      plateau. Baselines with equal iteration budgets.
+- [ ] 4.3 Choose the cheapest configuration ≥ 5 Hz; report its accuracy cost vs 25 iterations
+      and the hardware.
 
-**Exit:** table of 4 settings × methods; paper's 48/50 and 40/50 shown as reference only.
+**Exit:** a ≥ 5 Hz configuration with success rate and CI, or a clear statement that none exists.
 
-## Phase 4: O6 5 Hz tracking, ~2 days
+### Phase 5: O5 foundation-model latency table, ~2 days
+- [ ] 5.1 Port `model/foundation_study/shared/bench.py` to the target env; re-measure every model
+      (20 warm-up, 100 timed, fp32 + fp16, one input size 1280×720, same GPU).
+- [ ] 5.2 Standalone Detic and SigLIP2 benches; LocateAnything3D with the same protocol if it fits in 12 GB.
+- [ ] 5.3 VFM-DETR: state "no public weights", with the date checked and the source URL.
+- [ ] 5.4 Separate training-time models (detection, alignment) from the per-frame tracking path
+      (DINO only), so the table connects to O6.
+- [ ] 5.5 Optional: DINOv3 / MobileCLIPv2 in train+track, 5 seeds, ADD-S on pick-place.
 
-- [ ] 4.1 Per-stage profile of one tracking step (DINO forward, render, backward, optimiser).
-- [ ] 4.2 Candidates, each measured on all 54 offline cases plus the 30 Hz protocol:
-      fp16 DINO; 10–15 iterations + KF latency compensation; MobileCLIPv2 only if alignment is on
-      the per-frame path (it is not during tracking; state this).
-- [ ] 4.3 Pick the cheapest configuration with ≥ 5 Hz and report its accuracy loss vs 25 iterations.
+**Exit:** one table, one stack, every model measured or explained.
 
-**Exit:** a configuration at ≥ 5 Hz with its success rate, or a clear statement that none exists.
+### Phase 6: Report, ~3 days
+- [ ] 6.1 Extend `report/supervisor/make_figures.py` with Phase 1–5 outputs.
+- [ ] 6.2 Update the status table; move an item to "done" only when its exit criterion is met;
+      "Limitations" lists every unmet target.
+- [ ] 6.3 Second person checks every number against its source file.
+- [ ] 6.4 Build PDF + 10-slide summary; `git tag report-v1`.
 
-## Phase 5: O5 foundation-model latency, completing the table, ~2 days
+### Phase 7 (paper, after supervisor sign-off)
+- [ ] 7.1 Choose the headline contribution (§2.8) and venue (ICRA/IROS → RA-L, or T-RO/RAS for Q1 journals).
+- [ ] 7.2 Real-world sequence(s): tool scan + perturbation with an RGB-D camera.
+- [ ] 7.3 Related work since 2025 (dynamic/persistent GS tracking, FoundationPose-style trackers) and
+      a comparison against at least one external tracker on the same data.
+- [ ] 7.4 Release code + data; reproducibility checklist.
 
-- [ ] 5.1 Re-benchmark all models on the target stack (PyTorch 2.14 / CUDA 13) with the existing
-      `model/foundation_study/shared/bench.py` protocol (20 warm-up, 100 timed, fp32 + fp16).
-- [ ] 5.2 Add SigLIP2 standalone; Detic standalone (not only from logs).
-- [ ] 5.3 VFM-DETR: record "no public weights" with the date checked and the source.
-- [ ] 5.4 Optional: wire MobileCLIPv2 into train/track and run 5 seeds on pick-place.
+## 5. Questions for the supervisor (send before Phase 2)
 
-**Exit:** one latency table, one input size, one stack, every model either measured or explained.
+1. KL: per-Gaussian matched KL (pose-equivalent under rigid motion), image-space KL (GT-free), or both?
+2. Recovery: step-wise ±5° only, or also the paper's single 15°/30° jump? Rotation axis?
+3. Recovery success criterion and time window (we propose 3 cm / 5° within N frames).
+4. Is synthetic-only acceptable for the report, and is a real capture expected for the paper?
+5. Python 3.12 is requested; is Python 3.14 (current, working) acceptable if 3.12 wheels for
+   PyTorch 2.14 / CUDA 13.0 cause trouble?
 
-## Phase 6: Final report and presentation, ~3 days
-
-- [ ] 6.1 Extend `report/supervisor/make_figures.py` with phase 1–5 outputs; no manual numbers.
-- [ ] 6.2 Rewrite results sections; move "planned" items to "results" only when the exit
-      criterion is met. Keep a "Limitations" section listing every unmet target.
-- [ ] 6.3 Internal review: a second person checks every number against its source file.
-- [ ] 6.4 Build the PDF (`tectonic` or Overleaf), plus a 10-slide summary for the meeting.
-- [ ] 6.5 Tag the commit used for the report (`git tag report-v1`) so the PDF is reproducible.
-
-## Timeline (indicative)
+## 6. Timeline (indicative)
 
 | Week | Phases |
 |---|---|
-| 1 | 0, 1 |
-| 2 | 2 (after supervisor confirms the protocol), start 3 |
+| 1 | 0, 1; send §5 questions |
+| 2 | 2, start 3 |
 | 3 | 3, 4 |
-| 4 | 5, 6 |
-
-## Open questions for the supervisor
-
-1. KL divergence: per-Gaussian (our proposal) or between rendered feature/colour distributions?
-2. Recovery: step-wise (±5°) only, or also a single 30° jump as in the paper?
-3. Is synthetic-only evaluation acceptable, or is a real capture expected for the final report?
+| 4 | 5, 6 (report to supervisor) |
+| 5+ | 7 (paper) |
