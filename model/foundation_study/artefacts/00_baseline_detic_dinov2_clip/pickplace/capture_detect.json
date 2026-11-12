@@ -1,0 +1,342 @@
+{
+  "scene": "/home/user/model_study/inputs/pickplace",
+  "vocab": "lvis (stock POGS)",
+  "summary": {
+    "frames": 36,
+    "frames_with_any_mask": 27,
+    "masks_total": 46,
+    "masks_after_area_filter": 46,
+    "dropped_by_area_filter": 0,
+    "largest_area_frac_median": 0.07469,
+    "largest_area_frac_max": 0.21319,
+    "frames_with_mug_sized_mask": 16,
+    "note": "the mug occupies 2.3-3.6% of frame, so 'frames_with_mug_sized_mask' is suggestive, not proof. A definitive answer comes from tracking, where the ground-truth mask selects which gaussians to follow."
+  },
+  "per_frame": [
+    {
+      "frame": "frame_00001.png",
+      "n_masks": 3,
+      "n_masks_kept": 3,
+      "largest_area_frac": 0.21319,
+      "scores": [
+        0.593,
+        0.551,
+        0.53
+      ]
+    },
+    {
+      "frame": "frame_00002.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.04197,
+      "scores": [
+        0.744,
+        0.6
+      ]
+    },
+    {
+      "frame": "frame_00003.png",
+      "n_masks": 3,
+      "n_masks_kept": 3,
+      "largest_area_frac": 0.04586,
+      "scores": [
+        0.618,
+        0.541,
+        0.501
+      ]
+    },
+    {
+      "frame": "frame_00004.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00005.png",
+      "n_masks": 3,
+      "n_masks_kept": 3,
+      "largest_area_frac": 0.16764,
+      "scores": [
+        0.708,
+        0.52,
+        0.517
+      ]
+    },
+    {
+      "frame": "frame_00006.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.03321,
+      "scores": [
+        0.62,
+        0.593
+      ]
+    },
+    {
+      "frame": "frame_00007.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.03466,
+      "scores": [
+        0.615,
+        0.601
+      ]
+    },
+    {
+      "frame": "frame_00008.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.04843,
+      "scores": [
+        0.661,
+        0.513
+      ]
+    },
+    {
+      "frame": "frame_00009.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00010.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.20164,
+      "scores": [
+        0.579,
+        0.504
+      ]
+    },
+    {
+      "frame": "frame_00011.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.04175,
+      "scores": [
+        0.699,
+        0.69
+      ]
+    },
+    {
+      "frame": "frame_00012.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.20169,
+      "scores": [
+        0.589
+      ]
+    },
+    {
+      "frame": "frame_00013.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.18238,
+      "scores": [
+        0.548,
+        0.513
+      ]
+    },
+    {
+      "frame": "frame_00014.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.04347,
+      "scores": [
+        0.564,
+        0.544
+      ]
+    },
+    {
+      "frame": "frame_00015.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.18028,
+      "scores": [
+        0.599,
+        0.523
+      ]
+    },
+    {
+      "frame": "frame_00016.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.0402,
+      "scores": [
+        0.522
+      ]
+    },
+    {
+      "frame": "frame_00017.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.00843,
+      "scores": [
+        0.511
+      ]
+    },
+    {
+      "frame": "frame_00018.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.03089,
+      "scores": [
+        0.611
+      ]
+    },
+    {
+      "frame": "frame_00019.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.06625,
+      "scores": [
+        0.529
+      ]
+    },
+    {
+      "frame": "frame_00020.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00021.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00022.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.15984,
+      "scores": [
+        0.578,
+        0.503
+      ]
+    },
+    {
+      "frame": "frame_00023.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.08314,
+      "scores": [
+        0.617
+      ]
+    },
+    {
+      "frame": "frame_00024.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.1627,
+      "scores": [
+        0.547,
+        0.524
+      ]
+    },
+    {
+      "frame": "frame_00025.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.14536,
+      "scores": [
+        0.555,
+        0.525
+      ]
+    },
+    {
+      "frame": "frame_00026.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.07469,
+      "scores": [
+        0.535
+      ]
+    },
+    {
+      "frame": "frame_00027.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.12675,
+      "scores": [
+        0.555
+      ]
+    },
+    {
+      "frame": "frame_00028.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00029.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.06047,
+      "scores": [
+        0.502
+      ]
+    },
+    {
+      "frame": "frame_00030.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00031.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.05745,
+      "scores": [
+        0.611
+      ]
+    },
+    {
+      "frame": "frame_00032.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00033.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    },
+    {
+      "frame": "frame_00034.png",
+      "n_masks": 1,
+      "n_masks_kept": 1,
+      "largest_area_frac": 0.09834,
+      "scores": [
+        0.502
+      ]
+    },
+    {
+      "frame": "frame_00035.png",
+      "n_masks": 2,
+      "n_masks_kept": 2,
+      "largest_area_frac": 0.12231,
+      "scores": [
+        0.553,
+        0.508
+      ]
+    },
+    {
+      "frame": "frame_00036.png",
+      "n_masks": 0,
+      "n_masks_kept": 0,
+      "largest_area_frac": null,
+      "scores": []
+    }
+  ]
+}

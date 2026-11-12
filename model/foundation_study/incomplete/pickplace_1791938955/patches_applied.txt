@@ -1,0 +1,32 @@
+row: 01_locateanything_dinotxt
+applied: 2026-10-12T20:29:20Z
+--- 0001-configurable-dino-model.patch ---
+--- a/pogs/data/utils/dino_dataloader.py
++++ b/pogs/data/utils/dino_dataloader.py
+@@ -1,4 +1,6 @@
+ import typing
++
++import os
+ 
+ import torch
+ from pogs.data.utils.dino_extractor import ViTExtractor
+@@ -20,8 +22,17 @@
+     return new_H, new_W
+ 
+ class DinoDataloader(FeatureDataloader):
+-    dino_model_type = "dinov2_vits14"
+-    dino_stride = 14
++    # SUBSTITUTION ROW 01 -- makes the feature extractor configurable.
++    #
++    # Upstream 3d29f04 has these as literal class attributes. They are not config
++    # fields: ``cfg`` is only read for ``image_shape`` (lines 95-96), so stock
++    # POGS offers no supported way to use a different DINO checkpoint. That
++    # inflexibility is part of what this study measures.
++    #
++    # Defaults are byte-identical to upstream, so with nothing in the environment
++    # this file behaves exactly as it did before.
++    dino_model_type = os.environ.get("POGS_DINO_MODEL", "dinov2_vits14")
++    dino_stride = int(os.environ.get("POGS_DINO_STRIDE", "14"))
+     dino_layer = 11
+     dino_facet = "key"
+     dino_bin = False

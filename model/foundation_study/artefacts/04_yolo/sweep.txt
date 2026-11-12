@@ -1,0 +1,13 @@
+row: 04_yolo
+stages: bench
+total_minutes: 7
+  pendulum_05:ok:0
+  pendulum_10:ok:0
+  pendulum_15:ok:0
+  pendulum_20:ok:0
+  pendulum_25:ok:0
+  pendulum_30:ok:0
+  pendulum_40:ok:0
+  pendulum_50:ok:0
+  pendulum_60:ok:0
+  pickplace:ok:0

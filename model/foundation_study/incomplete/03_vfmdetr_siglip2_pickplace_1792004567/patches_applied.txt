@@ -1,0 +1,192 @@
+row: 03_vfmdetr_siglip2
+applied: 2026-10-14T13:04:23Z
+--- 0001-configurable-alignment-encoder.patch ---
+diff --git a/pogs/encoders/siglip2_encoder.py b/pogs/encoders/siglip2_encoder.py
+new file mode 100644
+index 0000000..13c630c
+--- /dev/null
++++ b/pogs/encoders/siglip2_encoder.py
+@@ -0,0 +1,125 @@
++"""SigLIP2 as a POGS relevancy encoder (substitution row 03).
++
++Implements the BaseImageEncoder interface OpenCLIPNetwork provides, so the
++rest of POGS (relevancy, lerf loss, tracking) is unchanged.
++"""
++
++from __future__ import annotations
++
++import os
++from dataclasses import dataclass, field
++from typing import Tuple, Type
++
++import torch
++import torchvision
++
++try:
++    from transformers import AutoModel, AutoProcessor
++except ImportError:
++    assert False, "SigLIP2 needs transformers>=4.50: pip install transformers"
++
++from pogs.encoders.image_encoder import (BaseImageEncoder,
++                                         BaseImageEncoderConfig)
++from nerfstudio.viewer.viewer_elements import ViewerText
++
++
++@dataclass
++class SigLIP2NetworkConfig(BaseImageEncoderConfig):
++    _target: Type = field(default_factory=lambda: SigLIP2Network)
++    model_spec: str = "google/siglip2-base-patch16-224"
++    negatives: Tuple[str, ...] = ("object", "things", "stuff", "texture")
++    device: str = "cuda:0"
++
++    @property
++    def name(self) -> str:
++        return "siglip2_base_patch16_224"
++
++
++class SigLIP2Network(BaseImageEncoder):
++    """Same surface as OpenCLIPNetwork: encode_image, set_positives,
++    get_relevancy, positives/negatives, embedding_dim."""
++
++    def __init__(self, config: SigLIP2NetworkConfig):
++        super().__init__()
++        self.config = config
++        # SigLIP2 normalizes with mean/std 0.5 at 224x224 (its processor);
++        # the torchvision form keeps encode_image tensor-in like OpenCLIP.
++        self.process = torchvision.transforms.Compose(
++            [
++                torchvision.transforms.Resize((224, 224)),
++                torchvision.transforms.Normalize(
++                    mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
++                ),
++            ]
++        )
++        # Prefer the study's offline weights dir when row_common exported it;
++        # fall back to the hub id so the module also works outside the study.
++        spec = config.model_spec
++        local = os.path.join(os.environ.get("POGS_WEIGHTS", ""), "siglip2")
++        if os.path.isfile(os.path.join(local, "config.json")):
++            spec = local
++        self.model = AutoModel.from_pretrained(spec).to(config.device).eval()
++        self.processor = AutoProcessor.from_pretrained(spec)
++        self.tokenizer = self.processor.tokenizer
++
++        self.positive_input = ViewerText("Positives", "", cb_hook=self.gui_cb)
++        self.positives = self.positive_input.value.split(";")
++        self.negatives = config.negatives
++        with torch.no_grad():
++            self.pos_embeds = self._encode_text(self.positives)
++            self.neg_embeds = self._encode_text(self.negatives)
++        self.pos_embeds /= self.pos_embeds.norm(dim=-1, keepdim=True)
++        self.neg_embeds /= self.neg_embeds.norm(dim=-1, keepdim=True)
++
++    @property
++    def name(self) -> str:
++        return self.config.name
++
++    @property
++    def embedding_dim(self) -> int:
++        return int(self.model.config.projection_dim)
++
++    def gui_cb(self, element):
++        self.set_positives(element.value.split(";"))
++
++    def _encode_text(self, text_list):
++        tok = self.tokenizer(
++            text_list, padding="max_length", truncation=True,
++            max_length=64, return_tensors="pt",
++        ).to(self.config.device)
++        return self.model.get_text_features(
++            input_ids=tok["input_ids"], attention_mask=tok["attention_mask"]
++        )
++
++    def set_positives(self, text_list):
++        self.positives = text_list
++        with torch.no_grad():
++            self.pos_embeds = self._encode_text(list(self.positives))
++        self.pos_embeds = self.pos_embeds / self.pos_embeds.norm(dim=-1, keepdim=True)
++        self.pos_embeds = self.pos_embeds.to(self.config.device)
++
++    def get_relevancy(self, embed: torch.Tensor, positive_id: int) -> torch.Tensor:
++        # Identical math to OpenCLIPNetwork.get_relevancy -- the softmax
++        # over pos-vs-neg sims is dimension-agnostic.
++        phrases_embeds = torch.cat([self.pos_embeds, self.neg_embeds], dim=0).to(self.config.device)
++        p = phrases_embeds.to(embed.dtype)
++        embed = embed.to(p.device)
++        output = torch.mm(embed, p.T)
++        positive_vals = output[..., positive_id : positive_id + 1]
++        negative_vals = output[..., len(self.positives) :]
++        repeated_pos = positive_vals.repeat(1, len(self.negatives))
++
++        sims = torch.stack((repeated_pos, negative_vals), dim=-1)
++        softmax = torch.softmax(10 * sims, dim=-1)
++        best_id = softmax[..., 0].argmin(dim=1)
++        return torch.gather(
++            softmax, 1,
++            best_id[..., None, None].expand(best_id.shape[0], len(self.negatives), 2),
++        )[:, 0, :]
++
++    def encode_image(self, input):
++        # float() regardless of incoming dtype: the frozen SigLIP2 weights
++        # are fp32, and OpenCLIP's half() would crash here on mismatch.
++        processed_input = self.process(input).to(self.config.device, dtype=torch.float32)
++        with torch.no_grad():
++            return self.model.get_image_features(pixel_values=processed_input)
+diff --git a/pogs/pogs.py b/pogs/pogs.py
+index 0aaec46..877f230 100644
+--- a/pogs/pogs.py
++++ b/pogs/pogs.py
+@@ -146,7 +146,15 @@ class POGSModel(SplatfactoModel):
+         self.gauss_params['dino_feats'] = torch.nn.Parameter(torch.randn((self.num_points, self.config.gaussian_dim)))
+         torch.inverse(torch.ones((1, 1), device="cuda:0"))# https://github.com/pytorch/pytorch/issues/90613
+         
+-        self.gaussian_field = GaussianField()
++        # SUBSTITUTION ROW 03 -- the CLIP head width must match the encoder.
++        # Stock POGS hardcodes GaussianField()'s default clip_n_dims=512, which
++        # is ViT-B-16's dim and silently wrong for any other encoder (SigLIP2
++        # base is 768). The datamanager constructs image_encoder before
++        # populate_modules runs, so its embedding_dim is final here. Stock
++        # encoder: OpenCLIPNetwork.embedding_dim is 512 = the old default.
++        self.gaussian_field = GaussianField(
++            clip_n_dims=self.kwargs["image_encoder"].embedding_dim
++        )
+         self.datamanager = self.kwargs["datamanager"]
+         self.image_encoder: BaseImageEncoder = self.kwargs["image_encoder"]
+ 
+diff --git a/pogs/pogs_config.py b/pogs/pogs_config.py
+index 3ea92c0..db16fd7 100644
+--- a/pogs/pogs_config.py
++++ b/pogs/pogs_config.py
+@@ -9,8 +9,14 @@ from nerfstudio.engine.schedulers import ExponentialDecaySchedulerConfig
+ from nerfstudio.plugins.types import MethodSpecification
+ from nerfstudio.engine.trainer import TrainerConfig as TrainerConfigBase
+ from pogs.encoders.openclip_encoder import OpenCLIPNetworkConfig
++# SUBSTITUTION ROW 03 -- top-level is safe in this row's env only: row 03 pins
++# transformers>=4.50, and this file lives in row 03's own POGS tree. Stock
++# trees do not carry this import.
++from pogs.encoders.siglip2_encoder import SigLIP2NetworkConfig
+ from pogs.pogs import POGSModelConfig
+ 
++import os
++
+ 
+ from pogs.pogs_pipeline import POGSPipelineConfig
+ from pogs.data.full_images_datamanager import FullImageDatamanagerConfig, FullImageDatamanager
+@@ -29,8 +35,15 @@ pogs_method = MethodSpecification(
+             datamanager=FullImageDatamanagerConfig(
+                 _target=FullImageDatamanager[DepthDataset], # Comment out the [DepthDataset] part to use RGB only datasets (e.g. polycam datasets)
+                 dataparser=NerfstudioDataParserConfig(load_3D_points=True, orientation_method='none', center_method='none', auto_scale_poses=False, depth_unit_scale_factor=1.0),
+-                network=OpenCLIPNetworkConfig(
+-                    clip_model_type="ViT-B-16", clip_model_pretrained="laion2b_s34b_b88k", clip_n_dims=512, device='cuda:0'
++                # SUBSTITUTION ROW 03 -- POGS_ALIGNMENT_ENCODER=siglip2 swaps
++                # the relevancy encoder. Unset, the else-branch below matches
++                # upstream exactly.
++                network=(
++                    SigLIP2NetworkConfig(device="cuda:0")
++                    if os.environ.get("POGS_ALIGNMENT_ENCODER") == "siglip2"
++                    else OpenCLIPNetworkConfig(
++                        clip_model_type="ViT-B-16", clip_model_pretrained="laion2b_s34b_b88k", clip_n_dims=512, device='cuda:0'
++                    )
+                 ),
+             ),
+             model=POGSModelConfig(),

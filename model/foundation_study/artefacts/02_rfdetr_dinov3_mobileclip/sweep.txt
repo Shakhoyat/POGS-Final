@@ -1,0 +1,13 @@
+row: 02_rfdetr_dinov3_mobileclip
+stages: bench
+total_minutes: 10
+  pendulum_05:ok:1
+  pendulum_10:ok:1
+  pendulum_15:ok:1
+  pendulum_20:ok:1
+  pendulum_25:ok:1
+  pendulum_30:ok:1
+  pendulum_40:ok:1
+  pendulum_50:ok:1
+  pendulum_60:ok:1
+  pickplace:ok:0

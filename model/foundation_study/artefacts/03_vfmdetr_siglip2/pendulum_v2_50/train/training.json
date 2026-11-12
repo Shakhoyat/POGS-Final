@@ -1,0 +1,4 @@
+{
+  "iterations": 4000,
+  "checkpoint": "/home/user/model_study/artefacts/03_vfmdetr_siglip2/pendulum_v2_50/train/pendulum_v2_50/pogs/2026-10-14_221844/nerfstudio_models/step-000003999.ckpt"
+}

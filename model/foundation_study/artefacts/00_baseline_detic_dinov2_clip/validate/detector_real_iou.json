@@ -1,0 +1,10 @@
+{
+  "detector": "detic",
+  "frames_dir": "G:\\My Drive\\POGS\\model_study\\inputs\\real_14",
+  "n_frames": 14,
+  "area_ceiling": 0.2857142857142857,
+  "source": "authors' test_data (real ZED capture, via POGS README)",
+  "per_frame": [],
+  "summary": null,
+  "status": "not run -- DETIC inference pending on the GPU host"
+}

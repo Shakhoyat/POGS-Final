@@ -1,0 +1,20 @@
+{
+  "row": "03_vfmdetr_siglip2",
+  "results": [
+    {
+      "model": "vfmdetr",
+      "spec": null,
+      "stage": "detection+features",
+      "status": "blocked",
+      "reason": "No weights located: zero HuggingFace search hits, no repository, no NeurIPS 2025 page under this name. Nearest matches are VFM-Det (arXiv 2408.13031, vehicle detection, 2024) and VFMTok (NeurIPS 2025, a tokenizer). Row 03 reports blocked."
+    },
+    {
+      "model": "siglip2",
+      "spec": "google/siglip2-base-patch16-224",
+      "stage": "alignment",
+      "status": "blocked",
+      "reason": "ImportError: huggingface-hub>=0.34.0,<1.0 is required for a normal functioning of this module, but found huggingface-hub==1.16.1.\nTry: `pip install transformers -U` or `pip install -e '.[dev]'` if you're working with git main",
+      "traceback": "Traceback (most recent call last):\n  File \"G:\\My Drive\\POGS\\model_study\\shared\\prefetch.py\", line 41, in prefetch_one\n    run, n_params = loader(name, device)\n                    ~~~~~~^^^^^^^^^^^^^^\n  File \"G:\\My Drive\\POGS\\model_study\\shared\\bench.py\", line 207, in load_siglip2\n    from transformers import AutoModel\nImportError: huggingface-hub>=0.34.0,<1.0 is required for a normal functioning of this module, but found huggingface-hub==1.16.1.\nTry: `pip install transformers -U` or `pip install -e '.[dev]'` if you're working with git main\n"
+    }
+  ]
+}

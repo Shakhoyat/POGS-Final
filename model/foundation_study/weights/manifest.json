@@ -1,0 +1,300 @@
+{
+  "clip_vitb16": {
+    "open_clip_config.json": {
+      "bytes": 469,
+      "status": "present",
+      "url": "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_config.json"
+    },
+    "open_clip_pytorch_model.bin": {
+      "bytes": 598529951,
+      "status": "present",
+      "url": "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_pytorch_model.bin"
+    },
+    "status": "present"
+  },
+  "detic": {
+    "Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth": {
+      "bytes": 702411632,
+      "status": "present",
+      "url": "https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth"
+    },
+    "status": "present"
+  },
+  "dino_txt": {
+    "bpe_simple_vocab_16e6.txt.gz": {
+      "bytes": 1356917,
+      "status": "present",
+      "url": "https://dl.fbaipublicfiles.com/dinov2/thirdparty/bpe_simple_vocab_16e6.txt.gz"
+    },
+    "dinov2_vitl14_reg4_dinotxt_tet1280d20h24l.pth": {
+      "bytes": null,
+      "status": "gated",
+      "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14_reg4_dinotxt/dinov2_vitl14_reg4_dinotxt_tet1280d20h24l.pth"
+    },
+    "dinov2_vitl14_reg4_dinotxt_tet1280d20h24l_text_encoder.pth": {
+      "bytes": 2152639923,
+      "status": "present",
+      "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_reg4_dinotxt_tet1280d20h24l_text_encoder.pth"
+    },
+    "dinov2_vitl14_reg4_dinotxt_tet1280d20h24l_vision_head.pth": {
+      "bytes": 101317814,
+      "status": "present",
+      "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_reg4_dinotxt_tet1280d20h24l_vision_head.pth"
+    },
+    "dinov2_vitl14_reg4_pretrain.pth": {
+      "bytes": 1217607321,
+      "status": "present",
+      "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_reg4_pretrain.pth"
+    },
+    "status": "present"
+  },
+  "dino_vits14": {
+    "dinov2_vits14_pretrain.pth": {
+      "bytes": 88283115,
+      "status": "present",
+      "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_pretrain.pth"
+    },
+    "status": "present"
+  },
+  "dinov3": {
+    "config.json": {
+      "bytes": 744,
+      "downloaded": "2026-10-15T02:21:21",
+      "sha256": "3c9cc418f4622fd6d5587fd142b6f3cba0ba6a69f67ced907d8b7f26118451ec",
+      "status": "present",
+      "url": "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m/resolve/main/config.json"
+    },
+    "model.safetensors": {
+      "bytes": 342662192,
+      "status": "present",
+      "url": "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m/resolve/main/model.safetensors"
+    },
+    "status": "present"
+  },
+  "locateanything3d": {
+    "added_tokens.json": {
+      "bytes": 19834,
+      "downloaded": "2026-10-13T19:17:56",
+      "sha256": "1a87d2bec4c707c3946235046555d91f9df6986b8dd4a3ac53e6d0b24c36d176",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/added_tokens.json"
+    },
+    "chat_template.json": {
+      "bytes": 1027,
+      "downloaded": "2026-10-13T19:18:03",
+      "sha256": "a0cb84f5108587c8a2e944ad7d4b123bb413c34baeef30e3d6d7a3bb486a835d",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/chat_template.json"
+    },
+    "config.json": {
+      "bytes": 2351,
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/config.json"
+    },
+    "configuration_locateanything.py": {
+      "bytes": 5558,
+      "downloaded": "2026-10-13T19:17:36",
+      "sha256": "d2738cc180add2b77e88b8cf2bc87ff012f23bd417a99150a033f61b0a8eb857",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/configuration_locateanything.py"
+    },
+    "configuration_qwen2.py": {
+      "bytes": 7025,
+      "downloaded": "2026-10-13T19:17:38",
+      "sha256": "1fda5efb735cae465debd414afc673389fe731afd95c934a469faa23d3d7fdf1",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/configuration_qwen2.py"
+    },
+    "generate_utils.py": {
+      "bytes": 18733,
+      "downloaded": "2026-10-13T19:17:48",
+      "sha256": "863187051772549928bf103b58f6176263c9b786fb19ef83fd7b2e76169fa65e",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/generate_utils.py"
+    },
+    "generation_config.json": {
+      "bytes": 121,
+      "downloaded": "2026-10-13T19:17:54",
+      "sha256": "f15f5de33244a61325923e99bad2c061029acb8d6dd5c57f8458b3949ddd8f97",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/generation_config.json"
+    },
+    "image_processing_locateanything.py": {
+      "bytes": 4908,
+      "downloaded": "2026-10-13T19:17:49",
+      "sha256": "5109868add766c7e244487ecfff6a6f5a4aa1497b38b385a33a969f12e23b4ec",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/image_processing_locateanything.py"
+    },
+    "mask_magi_utils.py": {
+      "bytes": 3840,
+      "downloaded": "2026-10-13T19:17:46",
+      "sha256": "646b565e38b30d58cafe30aeecf0283aee83d198ce8e57936c3488c1dc7b9276",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/mask_magi_utils.py"
+    },
+    "mask_sdpa_utils.py": {
+      "bytes": 9165,
+      "downloaded": "2026-10-13T19:17:44",
+      "sha256": "7e9d600eb25283963cc1696da060813066b9795da467cf9fb0ca68bfc8de1e1d",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/mask_sdpa_utils.py"
+    },
+    "merges.txt": {
+      "bytes": 1671853,
+      "downloaded": "2026-10-13T19:17:59",
+      "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/merges.txt"
+    },
+    "model-00001-of-00002.safetensors": {
+      "bytes": 4959632160,
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model-00001-of-00002.safetensors"
+    },
+    "model-00002-of-00002.safetensors": {
+      "bytes": 2701795216,
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model-00002-of-00002.safetensors"
+    },
+    "model.safetensors.index.json": {
+      "bytes": 70657,
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model.safetensors.index.json"
+    },
+    "modeling_locateanything.py": {
+      "bytes": 22174,
+      "downloaded": "2026-10-13T19:17:39",
+      "sha256": "ffe736fb8ded5d597201704ccd85134d18a8e4dea43d309228644737234b7244",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/modeling_locateanything.py"
+    },
+    "modeling_qwen2.py": {
+      "bytes": 78477,
+      "downloaded": "2026-10-13T19:17:41",
+      "sha256": "aadb676c0a587a16b7071977c159df16299fad22d88ee8ed9754881ab7f59575",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/modeling_qwen2.py"
+    },
+    "modeling_vit.py": {
+      "bytes": 21282,
+      "downloaded": "2026-10-13T19:17:43",
+      "sha256": "96479eb121c840f009a32830c78740154171290419108caefcf8778580700373",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/modeling_vit.py"
+    },
+    "preprocessor_config.json": {
+      "bytes": 480,
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/preprocessor_config.json"
+    },
+    "processing_locateanything.py": {
+      "bytes": 28446,
+      "downloaded": "2026-10-13T19:17:51",
+      "sha256": "682145ed054b1e912e66273b476e51a25b2d666d4a37b26385af9300b66d40d8",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/processing_locateanything.py"
+    },
+    "processor_config.json": {
+      "bytes": 493,
+      "downloaded": "2026-10-13T19:17:53",
+      "sha256": "1274db3b9504d37e57ea41ba7de547194d381265c5946f6db8560f851a940992",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/processor_config.json"
+    },
+    "special_tokens_map.json": {
+      "bytes": 13872,
+      "downloaded": "2026-10-13T19:17:57",
+      "sha256": "bfadce2f545458bf9d39fc9153cd2ac1077371ed5ab553fa4988061fefe67ac7",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/special_tokens_map.json"
+    },
+    "status": "present",
+    "tokenizer_config.json": {
+      "bytes": 195313,
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/tokenizer_config.json"
+    },
+    "vocab.json": {
+      "bytes": 3383407,
+      "downloaded": "2026-10-13T19:18:01",
+      "sha256": "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d",
+      "status": "present",
+      "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/vocab.json"
+    }
+  },
+  "mobileclipv2": {
+    "open_clip_config.json": {
+      "bytes": 731,
+      "status": "present",
+      "url": "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_config.json"
+    },
+    "open_clip_pytorch_model.bin": {
+      "bytes": 599240011,
+      "status": "present",
+      "url": "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_pytorch_model.bin"
+    },
+    "status": "present"
+  },
+  "rfdetr": {
+    "config.json": {
+      "bytes": 5761,
+      "status": "present",
+      "url": "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/config.json"
+    },
+    "model.safetensors": {
+      "bytes": 128757944,
+      "status": "present",
+      "url": "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/model.safetensors"
+    },
+    "status": "present"
+  },
+  "siglip2": {
+    "config.json": {
+      "bytes": 253,
+      "downloaded": "2026-10-14T19:15:31",
+      "sha256": "fe8b5fe6d5734360678fd71c11c21e1ea3364bd8598d34295d9206335973ffd7",
+      "status": "present",
+      "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/config.json"
+    },
+    "model.safetensors": {
+      "bytes": 1500800904,
+      "downloaded": "2026-10-14T19:15:28",
+      "sha256": "612923381c76ec5a9bed335d1c48827e3f2e506ac31b044b63b2031fadee6a0b",
+      "status": "present",
+      "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/model.safetensors"
+    },
+    "preprocessor_config.json": {
+      "bytes": 394,
+      "downloaded": "2026-10-14T19:15:33",
+      "sha256": "9b36b57ebaf20f09bf4c22100ccc21877ea6bfe5aead0c00c59f8af8ccefacfc",
+      "status": "present",
+      "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/preprocessor_config.json"
+    },
+    "status": "present",
+    "tokenizer.json": {
+      "bytes": 34363039,
+      "downloaded": "2026-10-14T19:15:36",
+      "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322",
+      "status": "present",
+      "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/tokenizer.json"
+    },
+    "tokenizer_config.json": {
+      "bytes": 47164,
+      "downloaded": "2026-10-14T19:15:38",
+      "sha256": "14afe629fe4959b9e0d51e1852b8d9f7ad074f90a1a7125a4fcdd17f06e78fc8",
+      "status": "present",
+      "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/tokenizer_config.json"
+    }
+  },
+  "yolo": {
+    "status": "present",
+    "yolo11x.pt": {
+      "bytes": 114636239,
+      "downloaded": "2026-10-15T03:33:05",
+      "sha256": "7bc158aa95c0ebfdd87f70f01653c1131b93e92522dbe15c228bcd742e773a24",
+      "status": "present",
+      "url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt"
+    }
+  }
+}

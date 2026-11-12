@@ -1,0 +1,59 @@
+--- a/pogs/data/utils/dino_dataloader.py
++++ b/pogs/data/utils/dino_dataloader.py
+@@ -1,4 +1,6 @@
+ import typing
++
++import os
+ 
+ import torch
+ from pogs.data.utils.dino_extractor import ViTExtractor
+@@ -10,18 +12,42 @@
+ 
+ #usually 1260 max size, 1050 for vit-L with ROI
+ MAX_DINO_SIZE = 1260
+-def get_img_resolution(H, W, p=14):
++
++# SUBSTITUTION ROW 02 -- DINOv3 is stride 16, upstream hardcodes 14.
++#
++# This is not a cosmetic change. get_img_resolution rounds H and W to a multiple
++# of p, and MAX_DINO_SIZE is a pixel budget, so feeding a stride-16 model a
++# stride-14 grid yields a different token count than the model expects and the
++# feature map is mis-shaped against the CLIP/gaussian alignment downstream. Both
++# p and the size budget therefore have to follow the model.
++_DINO_PATCH = int(os.environ.get("POGS_DINO_STRIDE", "14"))
++_MAX_DINO_SIZE = int(os.environ.get("POGS_DINO_MAX_SIZE", str(MAX_DINO_SIZE)))
++
++
++def get_img_resolution(H, W, p=None):
++    # Defaults to the env-configured stride rather than the literal 14, so a
++    # stride-16 model gets a stride-16 grid. Upstream took p=14 as a default
++    # argument, which meant a caller could not change it without editing the
++    # signature.
++    if p is None:
++        p = _DINO_PATCH
++    budget = _MAX_DINO_SIZE
+     if H<W:
+-        new_W = MAX_DINO_SIZE
+-        new_H = (int((H/W)*MAX_DINO_SIZE)//p)*p
++        new_W = budget
++        new_H = (int((H/W)*budget)//p)*p
+     else:
+-        new_H = MAX_DINO_SIZE
+-        new_W = (int((W/H)*MAX_DINO_SIZE)//p)*p
++        new_H = budget
++        new_W = (int((W/H)*budget)//p)*p
+     return new_H, new_W
+ 
+ class DinoDataloader(FeatureDataloader):
+-    dino_model_type = "dinov2_vits14"
+-    dino_stride = 14
++    # SUBSTITUTION ROW 02 -- makes the feature extractor configurable.
++    #
++    # Upstream 3d29f04 has these as literal class attributes and cfg is read only
++    # for image_shape, so stock POGS cannot use a different DINO checkpoint.
++    # Defaults are byte-identical to upstream.
++    dino_model_type = os.environ.get("POGS_DINO_MODEL", "dinov2_vits14")
++    dino_stride = _DINO_PATCH
+     dino_layer = 11
+     dino_facet = "key"
+     dino_bin = False

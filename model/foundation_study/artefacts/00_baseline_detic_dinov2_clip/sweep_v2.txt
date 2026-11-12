@@ -1,0 +1,13 @@
+row: 00_baseline_detic_dinov2_clip
+stages: train track
+total_minutes: 131
+  pendulum_v2_05:ok:12
+  pendulum_v2_10:ok:12
+  pendulum_v2_15:ok:12
+  pendulum_v2_20:ok:12
+  pendulum_v2_25:ok:12
+  pendulum_v2_30:ok:11
+  pendulum_v2_40:ok:12
+  pendulum_v2_50:ok:12
+  pendulum_v2_60:ok:12
+  pickplace_v2:ok:19

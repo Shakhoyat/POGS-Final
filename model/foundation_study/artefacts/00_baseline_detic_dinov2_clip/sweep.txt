@@ -1,0 +1,13 @@
+row: 00_baseline_detic_dinov2_clip
+stages: train track
+total_minutes: 125
+  pendulum_05:ok:12
+  pendulum_10:ok:10
+  pendulum_15:FAILED:10
+  pendulum_20:ok:11
+  pendulum_25:FAILED:12
+  pendulum_30:ok:12
+  pendulum_40:FAILED:11
+  pendulum_50:ok:12
+  pendulum_60:ok:13
+  pickplace:ok:17

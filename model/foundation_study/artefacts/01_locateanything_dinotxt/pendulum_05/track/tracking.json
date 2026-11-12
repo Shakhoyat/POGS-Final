@@ -1,0 +1,2665 @@
+{
+  "row": "01_locateanything_dinotxt",
+  "scene": "pendulum_05",
+  "input": "/home/user/model_study/inputs/pendulum_05",
+  "config": "/home/user/model_study/artefacts/01_locateanything_dinotxt/pendulum_05/train/pendulum_05/pogs/2026-10-14_032753/config.yml",
+  "seed": 42,
+  "opt_iters": 15,
+  "cluster_eps": 0.1,
+  "n_frames": 60,
+  "n_gaussians_total": 325470,
+  "n_gaussians_kept": 295,
+  "clusters": [
+    0
+  ],
+  "summary": {
+    "centroid_err_mm_mean": 9.037,
+    "centroid_err_mm_max": 13.086,
+    "frames_scored": 54,
+    "frames_total": 60,
+    "lost_at_frame": 0,
+    "init_failed": true,
+    "note": "displacement error against the generator's ground truth, frame 0 as reference, averaged over the frames where the object actually moves; INIT FAILED -- the object could not be registered on frame 0, so every frame is scored with no motion estimated (identity pose)"
+  },
+  "frames": [
+    {
+      "frame": 0,
+      "centroid_err_mm": [
+        0.0
+      ],
+      "centroid_err_mm_mean": 0.0,
+      "gt_centroid": [
+        0.0,
+        0.0,
+        0.3499999940395355
+      ],
+      "gt_displacement_mm": 0.0,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.0
+    },
+    {
+      "frame": 1,
+      "centroid_err_mm": [
+        2.273
+      ],
+      "centroid_err_mm_mean": 2.273,
+      "gt_centroid": [
+        0.002272962359711528,
+        0.0,
+        0.3500172197818756
+      ],
+      "gt_displacement_mm": 2.273,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.8682408883346516,
+      "lost": true
+    },
+    {
+      "frame": 2,
+      "centroid_err_mm": [
+        4.477
+      ],
+      "centroid_err_mm_mean": 4.477,
+      "gt_centroid": [
+        0.004476368892937899,
+        0.0,
+        0.35006678104400635
+      ],
+      "gt_displacement_mm": 4.477,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 1.7101007166283435,
+      "lost": true
+    },
+    {
+      "frame": 3,
+      "centroid_err_mm": [
+        6.544
+      ],
+      "centroid_err_mm_mean": 6.544,
+      "gt_centroid": [
+        0.006542908493429422,
+        0.0,
+        0.35014277696609497
+      ],
+      "gt_displacement_mm": 6.544,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 2.4999999999999996,
+      "lost": true
+    },
+    {
+      "frame": 4,
+      "centroid_err_mm": [
+        8.413
+      ],
+      "centroid_err_mm_mean": 8.413,
+      "gt_centroid": [
+        0.008409658446907997,
+        0.0,
+        0.3502359390258789
+      ],
+      "gt_displacement_mm": 8.413,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.2139380484326963,
+      "lost": true
+    },
+    {
+      "frame": 5,
+      "centroid_err_mm": [
+        10.026
+      ],
+      "centroid_err_mm_mean": 10.026,
+      "gt_centroid": [
+        0.010020031593739986,
+        0.0,
+        0.350335031747818
+      ],
+      "gt_displacement_mm": 10.026,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.83022221559489,
+      "lost": true
+    },
+    {
+      "frame": 6,
+      "centroid_err_mm": [
+        11.334
+      ],
+      "centroid_err_mm_mean": 11.334,
+      "gt_centroid": [
+        0.011325458064675331,
+        0.0,
+        0.35042816400527954
+      ],
+      "gt_displacement_mm": 11.334,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.330127018922193,
+      "lost": true
+    },
+    {
+      "frame": 7,
+      "centroid_err_mm": [
+        12.297
+      ],
+      "centroid_err_mm_mean": 12.297,
+      "gt_centroid": [
+        0.012286766432225704,
+        0.0,
+        0.3505040407180786
+      ],
+      "gt_displacement_mm": 12.297,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.698463103929542,
+      "lost": true
+    },
+    {
+      "frame": 8,
+      "centroid_err_mm": [
+        12.887
+      ],
+      "centroid_err_mm_mean": 12.887,
+      "gt_centroid": [
+        0.012875241227447987,
+        0.0,
+        0.35055357217788696
+      ],
+      "gt_displacement_mm": 12.887,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.92403876506104,
+      "lost": true
+    },
+    {
+      "frame": 9,
+      "centroid_err_mm": [
+        13.086
+      ],
+      "centroid_err_mm_mean": 13.086,
+      "gt_centroid": [
+        0.013073362410068512,
+        0.0,
+        0.35057079792022705
+      ],
+      "gt_displacement_mm": 13.086,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 5.0,
+      "lost": true
+    },
+    {
+      "frame": 10,
+      "centroid_err_mm": [
+        13.086
+      ],
+      "centroid_err_mm_mean": 13.086,
+      "gt_centroid": [
+        0.013073362410068512,
+        0.0,
+        0.35057079792022705
+      ],
+      "gt_displacement_mm": 13.086,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 5.0,
+      "lost": true
+    },
+    {
+      "frame": 11,
+      "centroid_err_mm": [
+        12.887
+      ],
+      "centroid_err_mm_mean": 12.887,
+      "gt_centroid": [
+        0.012875241227447987,
+        0.0,
+        0.35055357217788696
+      ],
+      "gt_displacement_mm": 12.887,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.92403876506104,
+      "lost": true
+    },
+    {
+      "frame": 12,
+      "centroid_err_mm": [
+        12.297
+      ],
+      "centroid_err_mm_mean": 12.297,
+      "gt_centroid": [
+        0.012286766432225704,
+        0.0,
+        0.3505040407180786
+      ],
+      "gt_displacement_mm": 12.297,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.698463103929542,
+      "lost": true
+    },
+    {
+      "frame": 13,
+      "centroid_err_mm": [
+        11.334
+      ],
+      "centroid_err_mm_mean": 11.334,
+      "gt_centroid": [
+        0.011325458064675331,
+        0.0,
+        0.35042816400527954
+      ],
+      "gt_displacement_mm": 11.334,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.330127018922193,
+      "lost": true
+    },
+    {
+      "frame": 14,
+      "centroid_err_mm": [
+        10.026
+      ],
+      "centroid_err_mm_mean": 10.026,
+      "gt_centroid": [
+        0.010020031593739986,
+        0.0,
+        0.350335031747818
+      ],
+      "gt_displacement_mm": 10.026,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.83022221559489,
+      "lost": true
+    },
+    {
+      "frame": 15,
+      "centroid_err_mm": [
+        8.413
+      ],
+      "centroid_err_mm_mean": 8.413,
+      "gt_centroid": [
+        0.008409658446907997,
+        0.0,
+        0.3502359390258789
+      ],
+      "gt_displacement_mm": 8.413,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.2139380484326963,
+      "lost": true
+    },
+    {
+      "frame": 16,
+      "centroid_err_mm": [
+        6.544
+      ],
+      "centroid_err_mm_mean": 6.544,
+      "gt_centroid": [
+        0.006542908493429422,
+        0.0,
+        0.35014277696609497
+      ],
+      "gt_displacement_mm": 6.544,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 2.4999999999999996,
+      "lost": true
+    },
+    {
+      "frame": 17,
+      "centroid_err_mm": [
+        4.477
+      ],
+      "centroid_err_mm_mean": 4.477,
+      "gt_centroid": [
+        0.004476368892937899,
+        0.0,
+        0.35006678104400635
+      ],
+      "gt_displacement_mm": 4.477,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 1.7101007166283435,
+      "lost": true
+    },
+    {
+      "frame": 18,
+      "centroid_err_mm": [
+        2.273
+      ],
+      "centroid_err_mm_mean": 2.273,
+      "gt_centroid": [
+        0.002272962359711528,
+        0.0,
+        0.3500172197818756
+      ],
+      "gt_displacement_mm": 2.273,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.8682408883346516,
+      "lost": true
+    },
+    {
+      "frame": 19,
+      "centroid_err_mm": [
+        0.0
+      ],
+      "centroid_err_mm_mean": 0.0,
+      "gt_centroid": [
+        0.0,
+        0.0,
+        0.3499999940395355
+      ],
+      "gt_displacement_mm": 0.0,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.0,
+      "lost": true
+    },
+    {
+      "frame": 20,
+      "centroid_err_mm": [
+        0.0
+      ],
+      "centroid_err_mm_mean": 0.0,
+      "gt_centroid": [
+        0.0,
+        0.0,
+        0.3499999940395355
+      ],
+      "gt_displacement_mm": 0.0,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.0,
+      "lost": true
+    },
+    {
+      "frame": 21,
+      "centroid_err_mm": [
+        2.273
+      ],
+      "centroid_err_mm_mean": 2.273,
+      "gt_centroid": [
+        0.002272962359711528,
+        0.0,
+        0.3500172197818756
+      ],
+      "gt_displacement_mm": 2.273,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.8682408883346516,
+      "lost": true
+    },
+    {
+      "frame": 22,
+      "centroid_err_mm": [
+        4.477
+      ],
+      "centroid_err_mm_mean": 4.477,
+      "gt_centroid": [
+        0.004476368892937899,
+        0.0,
+        0.35006678104400635
+      ],
+      "gt_displacement_mm": 4.477,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 1.7101007166283435,
+      "lost": true
+    },
+    {
+      "frame": 23,
+      "centroid_err_mm": [
+        6.544
+      ],
+      "centroid_err_mm_mean": 6.544,
+      "gt_centroid": [
+        0.006542908493429422,
+        0.0,
+        0.35014277696609497
+      ],
+      "gt_displacement_mm": 6.544,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 2.4999999999999996,
+      "lost": true
+    },
+    {
+      "frame": 24,
+      "centroid_err_mm": [
+        8.413
+      ],
+      "centroid_err_mm_mean": 8.413,
+      "gt_centroid": [
+        0.008409658446907997,
+        0.0,
+        0.3502359390258789
+      ],
+      "gt_displacement_mm": 8.413,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.2139380484326963,
+      "lost": true
+    },
+    {
+      "frame": 25,
+      "centroid_err_mm": [
+        10.026
+      ],
+      "centroid_err_mm_mean": 10.026,
+      "gt_centroid": [
+        0.010020031593739986,
+        0.0,
+        0.350335031747818
+      ],
+      "gt_displacement_mm": 10.026,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.83022221559489,
+      "lost": true
+    },
+    {
+      "frame": 26,
+      "centroid_err_mm": [
+        11.334
+      ],
+      "centroid_err_mm_mean": 11.334,
+      "gt_centroid": [
+        0.011325458064675331,
+        0.0,
+        0.35042816400527954
+      ],
+      "gt_displacement_mm": 11.334,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.330127018922193,
+      "lost": true
+    },
+    {
+      "frame": 27,
+      "centroid_err_mm": [
+        12.297
+      ],
+      "centroid_err_mm_mean": 12.297,
+      "gt_centroid": [
+        0.012286766432225704,
+        0.0,
+        0.3505040407180786
+      ],
+      "gt_displacement_mm": 12.297,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.698463103929542,
+      "lost": true
+    },
+    {
+      "frame": 28,
+      "centroid_err_mm": [
+        12.887
+      ],
+      "centroid_err_mm_mean": 12.887,
+      "gt_centroid": [
+        0.012875241227447987,
+        0.0,
+        0.35055357217788696
+      ],
+      "gt_displacement_mm": 12.887,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.92403876506104,
+      "lost": true
+    },
+    {
+      "frame": 29,
+      "centroid_err_mm": [
+        13.086
+      ],
+      "centroid_err_mm_mean": 13.086,
+      "gt_centroid": [
+        0.013073362410068512,
+        0.0,
+        0.35057079792022705
+      ],
+      "gt_displacement_mm": 13.086,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 5.0,
+      "lost": true
+    },
+    {
+      "frame": 30,
+      "centroid_err_mm": [
+        13.086
+      ],
+      "centroid_err_mm_mean": 13.086,
+      "gt_centroid": [
+        0.013073362410068512,
+        0.0,
+        0.35057079792022705
+      ],
+      "gt_displacement_mm": 13.086,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 5.0,
+      "lost": true
+    },
+    {
+      "frame": 31,
+      "centroid_err_mm": [
+        12.887
+      ],
+      "centroid_err_mm_mean": 12.887,
+      "gt_centroid": [
+        0.012875241227447987,
+        0.0,
+        0.35055357217788696
+      ],
+      "gt_displacement_mm": 12.887,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.92403876506104,
+      "lost": true
+    },
+    {
+      "frame": 32,
+      "centroid_err_mm": [
+        12.297
+      ],
+      "centroid_err_mm_mean": 12.297,
+      "gt_centroid": [
+        0.012286766432225704,
+        0.0,
+        0.3505040407180786
+      ],
+      "gt_displacement_mm": 12.297,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.698463103929542,
+      "lost": true
+    },
+    {
+      "frame": 33,
+      "centroid_err_mm": [
+        11.334
+      ],
+      "centroid_err_mm_mean": 11.334,
+      "gt_centroid": [
+        0.011325458064675331,
+        0.0,
+        0.35042816400527954
+      ],
+      "gt_displacement_mm": 11.334,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.330127018922193,
+      "lost": true
+    },
+    {
+      "frame": 34,
+      "centroid_err_mm": [
+        10.026
+      ],
+      "centroid_err_mm_mean": 10.026,
+      "gt_centroid": [
+        0.010020031593739986,
+        0.0,
+        0.350335031747818
+      ],
+      "gt_displacement_mm": 10.026,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.83022221559489,
+      "lost": true
+    },
+    {
+      "frame": 35,
+      "centroid_err_mm": [
+        8.413
+      ],
+      "centroid_err_mm_mean": 8.413,
+      "gt_centroid": [
+        0.008409658446907997,
+        0.0,
+        0.3502359390258789
+      ],
+      "gt_displacement_mm": 8.413,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.2139380484326963,
+      "lost": true
+    },
+    {
+      "frame": 36,
+      "centroid_err_mm": [
+        6.544
+      ],
+      "centroid_err_mm_mean": 6.544,
+      "gt_centroid": [
+        0.006542908493429422,
+        0.0,
+        0.35014277696609497
+      ],
+      "gt_displacement_mm": 6.544,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 2.4999999999999996,
+      "lost": true
+    },
+    {
+      "frame": 37,
+      "centroid_err_mm": [
+        4.477
+      ],
+      "centroid_err_mm_mean": 4.477,
+      "gt_centroid": [
+        0.004476368892937899,
+        0.0,
+        0.35006678104400635
+      ],
+      "gt_displacement_mm": 4.477,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 1.7101007166283435,
+      "lost": true
+    },
+    {
+      "frame": 38,
+      "centroid_err_mm": [
+        2.273
+      ],
+      "centroid_err_mm_mean": 2.273,
+      "gt_centroid": [
+        0.002272962359711528,
+        0.0,
+        0.3500172197818756
+      ],
+      "gt_displacement_mm": 2.273,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.8682408883346516,
+      "lost": true
+    },
+    {
+      "frame": 39,
+      "centroid_err_mm": [
+        0.0
+      ],
+      "centroid_err_mm_mean": 0.0,
+      "gt_centroid": [
+        0.0,
+        0.0,
+        0.3499999940395355
+      ],
+      "gt_displacement_mm": 0.0,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.0,
+      "lost": true
+    },
+    {
+      "frame": 40,
+      "centroid_err_mm": [
+        0.0
+      ],
+      "centroid_err_mm_mean": 0.0,
+      "gt_centroid": [
+        0.0,
+        0.0,
+        0.3499999940395355
+      ],
+      "gt_displacement_mm": 0.0,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.0,
+      "lost": true
+    },
+    {
+      "frame": 41,
+      "centroid_err_mm": [
+        2.273
+      ],
+      "centroid_err_mm_mean": 2.273,
+      "gt_centroid": [
+        0.002272962359711528,
+        0.0,
+        0.3500172197818756
+      ],
+      "gt_displacement_mm": 2.273,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.8682408883346516,
+      "lost": true
+    },
+    {
+      "frame": 42,
+      "centroid_err_mm": [
+        4.477
+      ],
+      "centroid_err_mm_mean": 4.477,
+      "gt_centroid": [
+        0.004476368892937899,
+        0.0,
+        0.35006678104400635
+      ],
+      "gt_displacement_mm": 4.477,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 1.7101007166283435,
+      "lost": true
+    },
+    {
+      "frame": 43,
+      "centroid_err_mm": [
+        6.544
+      ],
+      "centroid_err_mm_mean": 6.544,
+      "gt_centroid": [
+        0.006542908493429422,
+        0.0,
+        0.35014277696609497
+      ],
+      "gt_displacement_mm": 6.544,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 2.4999999999999996,
+      "lost": true
+    },
+    {
+      "frame": 44,
+      "centroid_err_mm": [
+        8.413
+      ],
+      "centroid_err_mm_mean": 8.413,
+      "gt_centroid": [
+        0.008409658446907997,
+        0.0,
+        0.3502359390258789
+      ],
+      "gt_displacement_mm": 8.413,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.2139380484326963,
+      "lost": true
+    },
+    {
+      "frame": 45,
+      "centroid_err_mm": [
+        10.026
+      ],
+      "centroid_err_mm_mean": 10.026,
+      "gt_centroid": [
+        0.010020031593739986,
+        0.0,
+        0.350335031747818
+      ],
+      "gt_displacement_mm": 10.026,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.83022221559489,
+      "lost": true
+    },
+    {
+      "frame": 46,
+      "centroid_err_mm": [
+        11.334
+      ],
+      "centroid_err_mm_mean": 11.334,
+      "gt_centroid": [
+        0.011325458064675331,
+        0.0,
+        0.35042816400527954
+      ],
+      "gt_displacement_mm": 11.334,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.330127018922193,
+      "lost": true
+    },
+    {
+      "frame": 47,
+      "centroid_err_mm": [
+        12.297
+      ],
+      "centroid_err_mm_mean": 12.297,
+      "gt_centroid": [
+        0.012286766432225704,
+        0.0,
+        0.3505040407180786
+      ],
+      "gt_displacement_mm": 12.297,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.698463103929542,
+      "lost": true
+    },
+    {
+      "frame": 48,
+      "centroid_err_mm": [
+        12.887
+      ],
+      "centroid_err_mm_mean": 12.887,
+      "gt_centroid": [
+        0.012875241227447987,
+        0.0,
+        0.35055357217788696
+      ],
+      "gt_displacement_mm": 12.887,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.92403876506104,
+      "lost": true
+    },
+    {
+      "frame": 49,
+      "centroid_err_mm": [
+        13.086
+      ],
+      "centroid_err_mm_mean": 13.086,
+      "gt_centroid": [
+        0.013073362410068512,
+        0.0,
+        0.35057079792022705
+      ],
+      "gt_displacement_mm": 13.086,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 5.0,
+      "lost": true
+    },
+    {
+      "frame": 50,
+      "centroid_err_mm": [
+        13.086
+      ],
+      "centroid_err_mm_mean": 13.086,
+      "gt_centroid": [
+        0.013073362410068512,
+        0.0,
+        0.35057079792022705
+      ],
+      "gt_displacement_mm": 13.086,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 5.0,
+      "lost": true
+    },
+    {
+      "frame": 51,
+      "centroid_err_mm": [
+        12.887
+      ],
+      "centroid_err_mm_mean": 12.887,
+      "gt_centroid": [
+        0.012875241227447987,
+        0.0,
+        0.35055357217788696
+      ],
+      "gt_displacement_mm": 12.887,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.92403876506104,
+      "lost": true
+    },
+    {
+      "frame": 52,
+      "centroid_err_mm": [
+        12.297
+      ],
+      "centroid_err_mm_mean": 12.297,
+      "gt_centroid": [
+        0.012286766432225704,
+        0.0,
+        0.3505040407180786
+      ],
+      "gt_displacement_mm": 12.297,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.698463103929542,
+      "lost": true
+    },
+    {
+      "frame": 53,
+      "centroid_err_mm": [
+        11.334
+      ],
+      "centroid_err_mm_mean": 11.334,
+      "gt_centroid": [
+        0.011325458064675331,
+        0.0,
+        0.35042816400527954
+      ],
+      "gt_displacement_mm": 11.334,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 4.330127018922193,
+      "lost": true
+    },
+    {
+      "frame": 54,
+      "centroid_err_mm": [
+        10.026
+      ],
+      "centroid_err_mm_mean": 10.026,
+      "gt_centroid": [
+        0.010020031593739986,
+        0.0,
+        0.350335031747818
+      ],
+      "gt_displacement_mm": 10.026,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.83022221559489,
+      "lost": true
+    },
+    {
+      "frame": 55,
+      "centroid_err_mm": [
+        8.413
+      ],
+      "centroid_err_mm_mean": 8.413,
+      "gt_centroid": [
+        0.008409658446907997,
+        0.0,
+        0.3502359390258789
+      ],
+      "gt_displacement_mm": 8.413,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 3.2139380484326963,
+      "lost": true
+    },
+    {
+      "frame": 56,
+      "centroid_err_mm": [
+        6.544
+      ],
+      "centroid_err_mm_mean": 6.544,
+      "gt_centroid": [
+        0.006542908493429422,
+        0.0,
+        0.35014277696609497
+      ],
+      "gt_displacement_mm": 6.544,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 2.4999999999999996,
+      "lost": true
+    },
+    {
+      "frame": 57,
+      "centroid_err_mm": [
+        4.477
+      ],
+      "centroid_err_mm_mean": 4.477,
+      "gt_centroid": [
+        0.004476368892937899,
+        0.0,
+        0.35006678104400635
+      ],
+      "gt_displacement_mm": 4.477,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 1.7101007166283435,
+      "lost": true
+    },
+    {
+      "frame": 58,
+      "centroid_err_mm": [
+        2.273
+      ],
+      "centroid_err_mm_mean": 2.273,
+      "gt_centroid": [
+        0.002272962359711528,
+        0.0,
+        0.3500172197818756
+      ],
+      "gt_displacement_mm": 2.273,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.8682408883346516,
+      "lost": true
+    },
+    {
+      "frame": 59,
+      "centroid_err_mm": [
+        0.0
+      ],
+      "centroid_err_mm_mean": 0.0,
+      "gt_centroid": [
+        0.0,
+        0.0,
+        0.3499999940395355
+      ],
+      "gt_displacement_mm": 0.0,
+      "est_centroids": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "est_poses": [
+        [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      ],
+      "angle_deg": 0.0,
+      "lost": true
+    }
+  ]
+}

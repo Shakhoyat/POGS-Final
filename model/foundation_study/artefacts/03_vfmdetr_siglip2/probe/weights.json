@@ -1,0 +1,233 @@
+{
+  "results": [
+    {
+      "model": "clip_vitb16",
+      "urls": [
+        "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_pytorch_model.bin",
+        "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_config.json"
+      ],
+      "checks": [
+        {
+          "url": "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_pytorch_model.bin",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 570.8
+        },
+        {
+          "url": "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_config.json",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 0.0
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "detic",
+      "urls": [
+        "https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth"
+      ],
+      "checks": [
+        {
+          "url": "https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 669.9
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "dino_txt",
+      "urls": [
+        "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14_reg4_dinotxt/dinov2_vitl14_reg4_dinotxt_tet1280d20h24l.pth"
+      ],
+      "checks": [
+        {
+          "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14_reg4_dinotxt/dinov2_vitl14_reg4_dinotxt_tet1280d20h24l.pth",
+          "status": "http-error",
+          "code": 403,
+          "reason": "Forbidden"
+        }
+      ],
+      "status": "gated",
+      "reason": "HuggingFace licence acceptance + token required"
+    },
+    {
+      "model": "dino_vitl14",
+      "urls": [
+        "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_pretrain.pth"
+      ],
+      "checks": [
+        {
+          "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_pretrain.pth",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 1161.2
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "dino_vits14",
+      "urls": [
+        "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_pretrain.pth"
+      ],
+      "checks": [
+        {
+          "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_pretrain.pth",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 84.2
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "dinov3",
+      "urls": [
+        "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m/resolve/main/model.safetensors"
+      ],
+      "checks": [
+        {
+          "url": "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m/resolve/main/model.safetensors",
+          "status": "http-error",
+          "code": 401,
+          "reason": "Unauthorized"
+        }
+      ],
+      "status": "gated",
+      "reason": "HuggingFace licence acceptance + token required"
+    },
+    {
+      "model": "locateanything3d",
+      "urls": [
+        "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model-00001-of-00002.safetensors",
+        "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model-00002-of-00002.safetensors",
+        "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model.safetensors.index.json",
+        "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/config.json",
+        "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/preprocessor_config.json",
+        "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/tokenizer_config.json"
+      ],
+      "checks": [
+        {
+          "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model-00001-of-00002.safetensors",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 4729.9
+        },
+        {
+          "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model-00002-of-00002.safetensors",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 2576.6
+        },
+        {
+          "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/model.safetensors.index.json",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 0.1
+        },
+        {
+          "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/config.json",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 0.0
+        },
+        {
+          "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/preprocessor_config.json",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 0.0
+        },
+        {
+          "url": "https://huggingface.co/nvidia/LocateAnything-3B/resolve/main/tokenizer_config.json",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 0.2
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "mobileclipv2",
+      "urls": [
+        "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_pytorch_model.bin",
+        "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_config.json"
+      ],
+      "checks": [
+        {
+          "url": "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_pytorch_model.bin",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 571.5
+        },
+        {
+          "url": "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_config.json",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 0.0
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "rfdetr",
+      "urls": [
+        "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/model.safetensors",
+        "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/config.json"
+      ],
+      "checks": [
+        {
+          "url": "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/model.safetensors",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 122.8
+        },
+        {
+          "url": "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/config.json",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 0.0
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "siglip2",
+      "urls": [
+        "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/model.safetensors"
+      ],
+      "checks": [
+        {
+          "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/model.safetensors",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 1431.3
+        }
+      ],
+      "status": "available"
+    },
+    {
+      "model": "vfmdetr",
+      "urls": [],
+      "status": "blocked",
+      "reason": "No weights located: zero HuggingFace search hits, no repository, no NeurIPS 2025 page under this name. Nearest matches are VFM-Det (arXiv 2408.13031, vehicle detection, 2024) and VFMTok (NeurIPS 2025, a tokenizer). Row 03 reports blocked."
+    },
+    {
+      "model": "yolo",
+      "urls": [
+        "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt"
+      ],
+      "checks": [
+        {
+          "url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt",
+          "status": "reachable",
+          "code": 200,
+          "size_mb": 109.3
+        }
+      ],
+      "status": "available"
+    }
+  ]
+}

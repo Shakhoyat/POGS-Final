@@ -1,0 +1,9 @@
+{
+  "seed": 42,
+  "iterations": 50,
+  "runs": [
+    "smoke_1",
+    "smoke_2"
+  ],
+  "match": null
+}
