@@ -146,3 +146,33 @@ def image_ssim(pred: torch.Tensor, target: torch.Tensor) -> float:
     p = pred.permute(2, 0, 1).unsqueeze(0).float()
     t = target.permute(2, 0, 1).unsqueeze(0).float()
     return float(structural_similarity_index_measure(p, t, data_range=1.0))
+
+
+# --------------------------------------------------------------------------- #
+# Ground-truth-free consistency (PLAN 2.4)
+# --------------------------------------------------------------------------- #
+
+
+def kl_render(observed: torch.Tensor, rendered: torch.Tensor, mask: torch.Tensor,
+              bins: int = 8, alpha: float = 0.01, min_pixels: int = 50) -> float:
+    """KL( P_obs || P_render ) between colour histograms inside ``mask``.
+
+    ``observed`` / ``rendered``: (H,W,3) in [0,1]; ``mask``: (H,W) bool, normally the
+    rendered object region (accumulation > 0.5), so no ground truth is needed.
+    Joint ``bins^3`` RGB histogram with add-``alpha`` smoothing (0.01 per bin, ~5
+    pseudo-pixels in total, so the prior does not swamp small objects). Near 0
+    when the rendered object explains the pixels it covers; rises when the
+    estimate slides off the object. Returns NaN if fewer than ``min_pixels``.
+    """
+    m = mask.bool()
+    if int(m.sum()) < min_pixels:
+        return float("nan")
+
+    def hist(img: torch.Tensor) -> torch.Tensor:
+        q = (img[m].clamp(0, 1 - 1e-6) * bins).long()
+        idx = (q[:, 0] * bins + q[:, 1]) * bins + q[:, 2]
+        h = torch.bincount(idx, minlength=bins ** 3).double() + alpha
+        return h / h.sum()
+
+    p, q = hist(observed), hist(rendered)
+    return float((p * (p.log() - q.log())).sum())

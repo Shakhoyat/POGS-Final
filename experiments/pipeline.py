@@ -40,6 +40,26 @@ DATASET_DIR = "datasets/synthetic_scenes/pick_place_floor_table"
 SCENE_CKPT_DIR = "model_checkpoints/pick_place_floor_table"
 RUNS_DIR = "data_results/benchmark_runs"
 
+CKPT_ID: Optional[str] = None
+"""sha256[:12] of the checkpoint file in use, set by ``train_or_load``. Every
+row is stamped with it and a cached row is reused only if it matches, so runs
+from a different trained model are never mixed into one table (PLAN §3)."""
+
+
+def _file_id(path: str) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 22), b""):
+            h.update(chunk)
+    return h.hexdigest()[:12]
+
+
+def _set_ckpt_id(ckpt_dir: str) -> None:
+    global CKPT_ID
+    from model.pogs.checkpoint import CKPT_NAME
+    CKPT_ID = _file_id(os.path.join(ckpt_dir, CKPT_NAME))
+
 
 # --------------------------------------------------------------------------- #
 # Encoders
@@ -84,6 +104,7 @@ def train_or_load(
         ck_version = ck.get("extra", {}).get("scene_version", 1)
         if ck_version == version:
             dino.set_pca(pca)
+            _set_ckpt_id(ckpt_dir)
             if verbose:
                 print(f"[train] loaded checkpoint from {ckpt_dir}: {model.num_points} gaussians, step {model.step}")
             return model, capture, dino, clip
@@ -105,6 +126,7 @@ def train_or_load(
     quality = evaluate_views(model, capture, cfg)
     save_checkpoint(ckpt_dir, model, features.dino_pca, cfg,
                     extra={"train_time_s": train_time, "scene_version": version, **quality})
+    _set_ckpt_id(ckpt_dir)
     labels = os.path.join(ckpt_dir, "cluster_labels.npy")
     if os.path.exists(labels):                       # clusters of the previous model
         os.remove(labels)
@@ -259,6 +281,7 @@ def run_suite(
             np.save(os.path.join(run_dir, "part_deltas.npy"), res.part_deltas)
             row = {"case": case.name, "condition": case.condition, "seed": case.seed, "speed": case.speed,
                    "depth": case.depth, "method": name, "target": groups.names[tg], "scene_version": SCENE_VERSION,
+                   "ckpt_id": CKPT_ID,
                    "n_frames": len(seq.frames), **_prefix(res.summary(tg), "")}
             row["lost_rate"] = lost_rate(res.trans_err_cm[:, tg])
             if mp is not None and tg in mp:
@@ -345,7 +368,7 @@ def run_realtime_suite(
                 mp = {i: mp_all[g] for i, g in enumerate(moving)}
             base = {"case": case.name, "condition": case.condition, "seed": case.seed, "speed": case.speed,
                     "depth": case.depth, "target": groups.names[0], "n_frames": len(seq.frames),
-                    "scene_version": SCENE_VERSION}
+                    "scene_version": SCENE_VERSION, "ckpt_id": CKPT_ID}
             if m is None:
                 res = static_baseline(groups, seq, g2gt, mp)
                 outs = [(name, res, None, None)]
@@ -414,11 +437,17 @@ def write_realtime_tables(df: pd.DataFrame, out_dir: str) -> None:
 
 
 def _cached_row(path: str) -> Optional[Dict]:
-    """A finished run's row, if it was produced on the current scene version."""
+    """A finished run's row, if it was produced on the current scene version
+    and (once a checkpoint is loaded) by the same checkpoint. Rows without a
+    ``ckpt_id`` predate the stamp and are treated as stale."""
     if not os.path.exists(path):
         return None
     row = json.load(open(path))
-    return row if row.get("scene_version", 1) == SCENE_VERSION else None
+    if row.get("scene_version", 1) != SCENE_VERSION:
+        return None
+    if CKPT_ID is not None and row.get("ckpt_id") != CKPT_ID:
+        return None
+    return row
 
 
 LOST_CM = 10.0
@@ -448,6 +477,8 @@ def rescore_runs(model: POGSModel, grouping: GroupingResult, runs_dir: str = RUN
             row = json.load(open(rp))
             if "adds_success" in row and "lost_rate" in row:
                 continue
+            if CKPT_ID is not None and row.get("ckpt_id") != CKPT_ID:
+                continue                             # telemetry of another model
             g = by_name.get(row["target"])
             if g is None:
                 continue

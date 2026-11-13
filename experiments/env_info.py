@@ -65,6 +65,7 @@ def collect_env() -> Dict[str, object]:
 def write_env_json(directory: str) -> str:
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, "env.json")
+    info = collect_env()
     with open(path, "w") as f:
-        json.dump(collect_env(), f, indent=2)
+        json.dump(info, f, indent=2)
     return path

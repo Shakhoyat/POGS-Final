@@ -118,3 +118,19 @@ def test_wilson_and_verdict():
     assert target_verdict(40, 50, 0.80) == "inconclusive (CI spans target)"
     assert target_verdict(20, 50, 0.80) == "not met"
     assert mean_std([1.0, 3.0, float("nan")]) == (2.0, pytest.approx(math.sqrt(2.0)))
+
+
+def test_kl_render_zero_when_equal_and_rises_when_off_object():
+    from metrics.gaussian import kl_render
+
+    g = torch.Generator().manual_seed(0)
+    img = torch.zeros(40, 40, 3)
+    img[10:30, 10:30] = torch.tensor([0.8, 0.1, 0.1])          # red object
+    img += 0.02 * torch.rand(40, 40, 3, generator=g)
+    mask = torch.zeros(40, 40, dtype=torch.bool)
+    mask[10:30, 10:30] = True
+    assert kl_render(img, img, mask) == pytest.approx(0.0, abs=1e-12)
+    kls = [kl_render(img, torch.roll(img, shifts=s, dims=1), mask) for s in (0, 5, 10, 20)]
+    assert kls[0] < kls[1] < kls[2] < kls[3]                    # render sliding off the object
+    assert kls[3] > 5.0                                          # 20 px = fully off: large
+    assert math.isnan(kl_render(img, img, torch.zeros_like(mask)))
