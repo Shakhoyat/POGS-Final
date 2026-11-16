@@ -83,3 +83,7 @@ model/foundation_study/**/clusters.npy
 *.synctex.gz
 *.fdb_latexmk
 *.fls
+
+# pipeline runtime state/logs
+data_results/_pipeline/*.running
+data_results/_pipeline/pid

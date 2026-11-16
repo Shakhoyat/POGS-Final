@@ -11,10 +11,12 @@ the plan; the reason is logged).
 `done` only when its evidence is in the repository.
 
 ## ▶ Resume here
-- **State (2026-11-17):** first 0.4 run died with the session (no checkpoint). Relaunched: `reproduce_check` (renders only base_s0–2) then `o1_grouping_splats`. Results: `data_results/repro_check/report.json`, `data_results/o1_grouping/metrics.json`. If neither exists and nothing runs: `source tools/cuda_env.sh && .venv/bin/python -u -m experiments.reproduce_check && .venv/bin/python -u -m experiments.o1_grouping_splats`.
-- **Next:** fill 0.4 / 1.x rows; smoke-test `python -m experiments.o3_perturbation --seeds 0` (tool scene + runner are written but never executed); then full O3 with jump sweep to 90° (PLAN §7 C3).
-- **Rules:** run cache is keyed by `ckpt_id`; old `data_results/benchmark_runs` rows are the 2026-11-10 reference only. Re-run only what tables need (C5).
-- **Env:** `.venv` → `~/venvs/pogs-py312`. Py 3.12.16, torch 2.14.1+cu130, gsplat 1.5.3; pins `requirements-lock.txt`. Tests: `source tools/cuda_env.sh && .venv/bin/python -m pytest -q -p no:cacheprovider tests` (26).
+- **Unattended pipeline:** `tools/run_pipeline.sh --detach | --status | --stop | --only <stage> | --redo <stage>`. Stages: tests → repro (0.4) → o1 → o3_smoke → o3 → v1 → v2 → realtime → v3. State + logs in `data_results/_pipeline/` (`<stage>.done|failed|log`, `status.tsv`). Failed stages are skipped over and retried on the next start. Started 2026-11-17 05:07.
+- **On resume:** run `--status`; read `.log` of any FAILED stage, fix, `--detach` again. Then fill the step rows below from `data_results/{repro_check/report.json, o1_grouping/metrics.json, o3_perturbation/summary.md}`.
+- **Not automated yet (no code):** O4 in-grasp trials (3.2–3.3), O6 profile + speed candidates (4.x), O5 re-benchmark (5.x), report figures (6.x). Add each as a line in `STAGES` when written.
+- **Untested code in the pipeline:** `o3_perturbation` (first real run is stage `o3_smoke`).
+- **Rules:** run cache keyed by `ckpt_id`; the 2026-11-10 results are git tag `results-2026-11-10` (v1/v2/realtime/v3 stages overwrite `data_results/` with the new checkpoint's numbers).
+- **Env:** `.venv` → `~/venvs/pogs-py312`. Py 3.12.16, torch 2.14.1+cu130, gsplat 1.5.3; pins `requirements-lock.txt`.
 
 ## Step status
 

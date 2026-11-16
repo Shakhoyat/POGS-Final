@@ -264,10 +264,11 @@ def generate_tool_sequence(case: ToolCase, out_dir: str = TOOL_DATASET_DIR, cfg:
 
 def o3_cases(seeds: Sequence[int] = range(5), axes: Sequence[str] = ("z",)) -> List[ToolCase]:
     """O3 matrix (draft protocol): step-wise 30 deg with 5/10/15 deg steps, and
-    single jumps of +/-15 and +/-30 deg."""
+    single jumps of +/-15, +/-30 (paper Table II) and 45/60/90 deg (to find where
+    recovery breaks, PLAN §7 C3)."""
     out = []
     for ax in axes:
         for s in seeds:
             out += [ToolCase("step", 30.0, st, ax, s) for st in (5.0, 10.0, 15.0)]
-            out += [ToolCase("jump", a, axis=ax, seed=s) for a in (15.0, -15.0, 30.0, -30.0)]
+            out += [ToolCase("jump", a, axis=ax, seed=s) for a in (15.0, -15.0, 30.0, -30.0, 45.0, 60.0, 90.0)]
     return out
