@@ -100,16 +100,9 @@ def score_trial(res, seq, means_local, covs, opac, tip_local, mp) -> Dict:
     }
 
 
-def main(seeds: List[int], axes: List[str], device: str = "cuda:0") -> pd.DataFrame:
-    os.makedirs(OUT, exist_ok=True)
-    write_env_json(OUT)
-    if not os.path.exists(os.path.join(TOOL_DATASET_DIR, "capture", "images.npy")):
-        generate_tool_capture(TOOL_DATASET_DIR, device=device)
-    cases = o3_cases(seeds, axes)
-    for c in cases:
-        if not os.path.exists(os.path.join(TOOL_DATASET_DIR, c.name, "tracking_metadata.json")):
-            generate_tool_sequence(c, TOOL_DATASET_DIR, device=device)
-
+def setup_tool_context(device: str = "cuda:0") -> Dict:
+    """Checkpoint + grouping of the tool scene and everything ``score_trial`` needs about the drill group
+    (shared by O3 and O4). Needs the tool capture on disk."""
     cfg = get_v1_config(device)
     model, capture, dino, clip = train_or_load(cfg, dataset_dir=TOOL_DATASET_DIR, ckpt_dir=CKPT_DIR,
                                                objects=build_tool_scene())
@@ -132,6 +125,23 @@ def main(seeds: List[int], axes: List[str], device: str = "cuda:0") -> pd.DataFr
     scan_drill = next(o for o in build_tool_scene() if o.obj_id == DRILL_ID)
     tip_world = np.asarray(scan_drill.position) + DRILL_TIP_LOCAL      # drill yaw 0 at scan
     tip_local = tip_world - c0.cpu().numpy()
+    return dict(cfg=cfg, model=model, dino=dino, groups=groups, g2gt=g2gt, mp=mp, means_local=means_local,
+                covs=covs, opac=opac, tip_local=tip_local)
+
+
+def main(seeds: List[int], axes: List[str], device: str = "cuda:0") -> pd.DataFrame:
+    os.makedirs(OUT, exist_ok=True)
+    write_env_json(OUT)
+    if not os.path.exists(os.path.join(TOOL_DATASET_DIR, "capture", "images.npy")):
+        generate_tool_capture(TOOL_DATASET_DIR, device=device)
+    cases = o3_cases(seeds, axes)
+    for c in cases:
+        if not os.path.exists(os.path.join(TOOL_DATASET_DIR, c.name, "tracking_metadata.json")):
+            generate_tool_sequence(c, TOOL_DATASET_DIR, device=device)
+
+    ctx = setup_tool_context(device)
+    cfg, model, dino, groups, g2gt, mp = (ctx[k] for k in ("cfg", "model", "dino", "groups", "g2gt", "mp"))
+    means_local, covs, opac, tip_local = (ctx[k] for k in ("means_local", "covs", "opac", "tip_local"))
 
     rows = []
     for c in cases:

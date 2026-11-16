@@ -11,13 +11,13 @@ the plan; the reason is logged).
 `done` only when its evidence is in the repository.
 
 ## ▶ Resume here
-- **Unattended pipeline:** `tools/run_pipeline.sh --detach | --status | --stop | --only <stage> | --redo <stage>`. Stages: tests → repro (0.4) → o1 → o3_smoke → o3 → o6 (4.x) → v1 → v2 → realtime → v3. State + logs in `data_results/_pipeline/` (`<stage>.done|failed|log`, `status.tsv`). Failed stages are skipped over and retried on the next start. Started 2026-11-17 05:07.
-- **Never edit `tools/run_pipeline.sh` while it runs** (bash reads it incrementally; the stage list is fixed at start). To add a stage: `kill <wrapper pid>` (not `--stop`, which also kills the experiment), edit, `--detach`; stages already `.done` are skipped.
-- **On resume:** run `--status`; read `.log` of any FAILED stage, fix, `--detach` again. Then fill the step rows below from `data_results/{repro_check/report.json, o1_grouping/metrics.json, o3_perturbation/summary.md}`.
-- **Not automated yet (no code):** O4 in-grasp trials (3.2–3.3), O5 re-benchmark (5.x), report figures (6.x). Add each as a line in `STAGES` when written.
-- **Untested code in the pipeline:** `o3_perturbation` (first real run is stage `o3_smoke`).
-- **Rules:** run cache keyed by `ckpt_id`; the 2026-11-10 results are git tag `results-2026-11-10` (v1/v2/realtime/v3 stages overwrite `data_results/` with the new checkpoint's numbers).
-- **Env:** `.venv` → `~/venvs/pogs-py312`. Py 3.12.16, torch 2.14.1+cu130, gsplat 1.5.3; pins `requirements-lock.txt`.
+- **Unattended pipeline:** `tools/run_pipeline.sh --detach | --status | --stop | --only <stage> | --redo <stage>`. Order: tests → repro (0.4) → o1 → o3_smoke → o6 (4.x) → o3 → o4_smoke → o4 (3.x) → o5 (5.x, own venv `~/venvs/pogs-o5`) → v1 → v2 → realtime → v3. State + logs: `data_results/_pipeline/` (`<stage>.done|failed|log`, `status.tsv`). A failed stage is skipped and retried on the next start. Started 2026-11-17 05:07; estimated ≥ 12 h for everything (O4 alone ≈ 3.5 h: 200 sequences + 600 tracking runs).
+- **Never edit `tools/run_pipeline.sh` while it runs** (bash reads it incrementally; the stage list is fixed at start). To add a stage: `kill <wrapper pid>` (not `--stop`, which also kills the experiment), edit, `--detach`; `.done` stages are skipped.
+- **On resume:** `--status`; read the `.log` of any FAILED stage, fix, `--detach`. Then fill rows below from `data_results/{repro_check/report.json, o1_grouping/metrics.json, o3_perturbation/summary.md, o4_ingrasp/summary.md, o6_speed/summary.md}` and `model/foundation_study/artefacts/*/*/bench`.
+- **Never executed yet (expect first-run bugs):** o3, o4, o6, o5 scripts and the tool scene render. Smoke stages o3_smoke / o4_smoke fail fast.
+- **Not written:** report figures/tables from the new results (6.x), 54-case + 30 Hz re-check of the chosen O6 configuration, 3-seed training repeats (C4), real capture (7.2).
+- **Rules:** run cache keyed by `ckpt_id`; the 2026-11-10 results are git tag `results-2026-11-10` (v1/v2/realtime/v3 overwrite `data_results/` with the new checkpoint's numbers).
+- **Env:** `.venv` → `~/venvs/pogs-py312` (py 3.12.16, torch 2.14.1+cu130, gsplat 1.5.3; pins `requirements-lock.txt`). Tests: 30.
 
 ## Step status
 
@@ -51,9 +51,9 @@ the plan; the reason is logged).
 ### Phase 3: O4 in-grasp recovery rate (80 %)
 | Step | Description | Status | Started | Finished | Evidence | Notes |
 |---|---|---|---|---|---|---|
-| 3.1 | `experiments/protocols/o4.md` pre-registered | doing | 2026-11-13 | | `experiments/protocols/o4.md` (draft) | Freeze before first O4 run |
-| 3.2 | Drill-in-gripper perturbation scene | todo | | | | |
-| 3.3 | Rates + Wilson CI, verdict per setting | todo | | | | |
+| 3.1 | `experiments/protocols/o4.md` pre-registered | doing | 2026-11-13 | | `experiments/protocols/o4.md` (provisional) | Success: tip<3 cm, rot<5° at N=10 frames after perturbation, never lost after it |
+| 3.2 | Drill-in-gripper perturbation scene | doing | 2026-11-17 | | `tool_perturbation.generate_grasp_sequence`, `tests/test_tool.py` | Gripper scale 1.0, fingers straddle housing; jaws not collision-checked; occlusion fraction not computed (flagged in metadata). Not rendered yet |
+| 3.3 | Rates + Wilson CI, verdict per setting | doing | 2026-11-17 | | `experiments/o4_ingrasp.py` → `data_results/o4_ingrasp/summary.md` | Pipeline stages o4_smoke, o4; 4 settings × 50 trials × 4 methods |
 
 ### Phase 4: O6 5 Hz tracking
 | Step | Description | Status | Started | Finished | Evidence | Notes |
@@ -65,9 +65,9 @@ the plan; the reason is logged).
 ### Phase 5: O5 foundation-model latency
 | Step | Description | Status | Started | Finished | Evidence | Notes |
 |---|---|---|---|---|---|---|
-| 5.1 | Re-benchmark on target stack | todo | | | | |
+| 5.1 | Re-benchmark on target stack | doing | 2026-11-17 | | `tools/o5_latency.sh` (venv `~/venvs/pogs-o5` built) | dino_vits14, clip_vitb16, mobileclipv2, siglip2, yolo, rfdetr, dinov3 (gated: needs HF_TOKEN). Stage o5 |
 | 5.2 | Detic, SigLIP2 (and LocateAnything3D) standalone | todo | | | | |
-| 5.3 | VFM-DETR availability recorded with date + source | todo | | | | |
+| 5.3 | VFM-DETR availability recorded with date + source | done | 2026-11-17 | 2026-11-17 | `tools/o5_latency.sh` note → `data_results/o5_latency_note.json` | Two web searches found no repo/weights (hits: VFMTok, RT-DETRv4); paper not located. Worded "not found", not "does not exist" |
 | 5.4 | Training-time vs per-frame split | todo | | | | |
 | 5.5 | Optional: DINOv3 / MobileCLIPv2 in train + track | todo | | | | |
 
@@ -110,6 +110,8 @@ Anything that departs from the plan, the paper, the release or the brief. Never 
 | 2026-11-13 | 2.4 | `kl_render` smoothing 0.01/bin (not 1) | Add-1 over 512 bins swamps a few-hundred-pixel object |
 | 2026-11-17 | plan | Critique C1–C11 added to PLAN §7; protocols run provisional without waiting for supervisor (C2); jump sweep to 90° (C3); selective re-runs (C5) | See PLAN §7 |
 | 2026-11-13 | 2.2 | O3 trials start at the scanned pose and settle to a random start pose | Random initial pose would mix initialisation failures into recovery |
+| 2026-11-17 | 5.2 | LocateAnything3D and Detic skipped in the new-stack benchmark; old-stack numbers kept and labelled | 9.5 GB / 8–11 GB VRAM; detectron2 not buildable on py3.12 / torch 2.14. Time-box (PLAN §7 C8) |
+| 2026-11-17 | 3.2 | In-grasp rotation about the vertical grasp axis with a static gripper, no jaw collision | Simulator limitation; stated in o4 summary |
 
 ## Session log
 Dropped (C11): history is in git log and the tables above.

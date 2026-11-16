@@ -272,3 +272,121 @@ def o3_cases(seeds: Sequence[int] = range(5), axes: Sequence[str] = ("z",)) -> L
             out += [ToolCase("step", 30.0, st, ax, s) for st in (5.0, 10.0, 15.0)]
             out += [ToolCase("jump", a, axis=ax, seed=s) for a in (15.0, -15.0, 30.0, -30.0, 45.0, 60.0, 90.0)]
     return out
+
+
+# --------------------------------------------------------------------------- #
+# O4: in-grasp perturbation (experiments/protocols/o4.md)
+# --------------------------------------------------------------------------- #
+
+APPROACH_FRAMES = 4
+LIFT_FRAMES = 6
+HOLD_X_FRAMES = 3
+GRASP_HOLD = 15
+GRASP_APPROACH_H = 0.18
+GRASP_LIFT_RANGE = (0.08, 0.12)
+GRASP_PIVOT_LOCAL = np.array([0.0, 0.0, 0.065])
+"""Housing centre in the drill frame: the vertical grasp axis the tool turns about."""
+
+
+@dataclass
+class GraspCase:
+    angle: float          # signed in-grasp rotation (deg), + = counter-clockwise seen from above
+    seed: int = 0
+
+    @property
+    def name(self) -> str:
+        return f"grasp_{self.angle:+g}_s{self.seed}"
+
+
+def o4_cases(seeds: Sequence[int] = range(50), angles: Sequence[float] = (15.0, -15.0, 30.0, -30.0)) -> List[GraspCase]:
+    return [GraspCase(a, s) for a in angles for s in seeds]
+
+
+def _translate(v: np.ndarray) -> np.ndarray:
+    T = np.eye(4)
+    T[:3, 3] = v
+    return T
+
+
+def _smooth(x: float) -> float:
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def generate_grasp_sequence(case: GraspCase, out_dir: str = TOOL_DATASET_DIR, cfg: Optional[BenchmarkConfig] = None,
+                            device: str = "cuda:0", verbose: bool = True) -> str:
+    """approach (gripper descends, drill static at the scanned pose) -> lift (gripper + drill rise
+    to a per-seed pose: shift <= 5 cm, yaw +-45 deg, height 8-12 cm) -> hold_x -> in-grasp rotation
+    of the drill about the vertical grasp axis while the gripper stays put -> hold.
+    The jaws are not collision-checked against the turning drill (rendering only)."""
+    from .pick_place_benchmark import GRIPPER_ID
+    from .photoreal_scene import make_robot_gripper
+
+    cfg = cfg or BenchmarkConfig()
+    objects = build_tool_scene()
+    drill = next(o for o in objects if o.obj_id == DRILL_ID)
+    cam = tracking_camera(cfg, device)
+    rng = np.random.default_rng(zlib.crc32(f"grasp_s{case.seed}".encode()))
+    shift, yaw0 = sample_start(case.seed)
+    lift_h = float(rng.uniform(*GRASP_LIFT_RANGE))
+    R_scan = np.array([[math.cos(drill.yaw), -math.sin(drill.yaw), 0], [math.sin(drill.yaw), math.cos(drill.yaw), 0],
+                       [0, 0, 1]])
+    c = np.asarray(drill.position) + R_scan @ GRASP_PIVOT_LOCAL
+    z_axis = np.array([0.0, 0.0, 1.0])
+    top = drill.position[2] + 0.130
+    g = make_robot_gripper(scale=1.0)
+    g.position, g.yaw, g.obj_id, g.movable = (c[0], c[1], top + 0.008), drill.yaw + math.pi / 2, GRIPPER_ID, True
+    objs = objects + [g]
+
+    def lift(w: float) -> np.ndarray:
+        return _translate(w * np.array([shift[0], shift[1], lift_h])) @ rotation_about(c, z_axis, w * yaw0)
+
+    sched = []  # (drill delta, gripper delta, commanded in-grasp deg, phase)
+    for k in range(APPROACH_FRAMES):
+        u = (k + 1) / APPROACH_FRAMES
+        sched.append((np.eye(4), _translate([0, 0, GRASP_APPROACH_H * (1 - _smooth(u))]), 0.0, "approach"))
+    for k in range(LIFT_FRAMES):
+        T = lift(_smooth((k + 1) / LIFT_FRAMES))
+        sched.append((T, T, 0.0, "lift"))
+    T1 = lift(1.0)
+    c1 = (T1 @ np.append(c, 1.0))[:3]
+    for _ in range(HOLD_X_FRAMES):
+        sched.append((T1, T1, 0.0, "rest_x"))
+    for _ in range(GRASP_HOLD):
+        sched.append((rotation_about(c1, z_axis, case.angle) @ T1, T1, case.angle, "perturbed"))
+
+    sc_dir = os.path.join(out_dir, case.name)
+    for sub in ("rgb", "depth_mm", "masks"):
+        os.makedirs(os.path.join(sc_dir, sub), exist_ok=True)
+    movable_ids = [o.obj_id for o in objects if o.obj_id not in (FLOOR_ID, TABLE_ID)]
+    frames_meta, t0 = [], time.time()
+    for f, (D, G, ang, phase) in enumerate(sched):
+        out = render_photoreal_scene(FlatScene(objs, device=device).clone_with_transforms({DRILL_ID: D, GRIPPER_ID: G}),
+                                     cam, cast_shadows=True)
+        rgb = (out["rgb"].cpu().numpy() * 255).astype(np.uint8)
+        fname = f"frame_{f:04d}.png"
+        cv2.imwrite(os.path.join(sc_dir, "rgb", fname), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+        _write_png_depth_mm(os.path.join(sc_dir, "depth_mm", fname), out["depth"].cpu().numpy())
+        cv2.imwrite(os.path.join(sc_dir, "masks", fname), out["obj_id"].cpu().numpy().astype(np.uint8))
+        frames_meta.append({
+            "frame": f, "timestamp_sec": f / cfg.fps, "phase": phase, "rot_deg": abs(ang), "commanded_deg": ang,
+            "yaw_deg": ang, "tilt_deg": 0.0, "translation_cm": 0.0, "hand_visible": False,
+            "occlusion_frac": 0.0, "occlusion_by_obj": {str(DRILL_ID): 0.0},
+            "gt_deltas": {str(oid): (D if oid == DRILL_ID else np.eye(4)).tolist() for oid in movable_ids},
+        })
+    meta = {
+        "name": case.name, "scene_version": TOOL_SCENE_VERSION, "scene": "tool_table", "condition": "grasp",
+        "seed": case.seed, "case": case.__dict__, "target_object_id": DRILL_ID, "target_object": TOOL_OBJECT_NAMES[DRILL_ID],
+        "moving_object_ids": [DRILL_ID], "start_shift_m": shift.tolist(), "start_yaw_deg": yaw0, "lift_height_m": lift_h,
+        "gripper_scale": 1.0, "occlusion_frac_not_computed": True, "tool_tip_local": DRILL_TIP_LOCAL.tolist(),
+        "fps": cfg.fps, "n_frames": len(sched),
+        "depth_format": "uint16 PNG, millimetres, noise-free (noise is added at load time)",
+        "camera": {"c2w": cam.c2w.cpu().tolist(), "fx": cam.fx, "fy": cam.fy, "cx": cam.cx, "cy": cam.cy,
+                   "width": cam.width, "height": cam.height},
+        "frames": frames_meta,
+    }
+    with open(os.path.join(sc_dir, "tracking_metadata.json"), "w") as fh:
+        json.dump(meta, fh, indent=1)
+    if verbose:
+        print(f"[grasp] {case.name}: {len(sched)} frames in {time.time() - t0:.1f}s")
+    return sc_dir
