@@ -434,10 +434,15 @@ def _write_png_depth_mm(path: str, depth: np.ndarray) -> None:
     cv2.imwrite(path, np.clip(depth * 1000.0, 0, 65535).astype(np.uint16))
 
 
-def generate_capture(out_dir: str, cfg: BenchmarkConfig, device: str = "cuda:0", verbose: bool = True) -> None:
+def generate_capture(out_dir: str, cfg: BenchmarkConfig, device: str = "cuda:0", verbose: bool = True,
+                     objects: Optional[List] = None, object_names: Optional[Dict[int, str]] = None,
+                     scene_version: int = SCENE_VERSION) -> None:
+    """``objects`` / ``object_names`` / ``scene_version`` default to the
+    pick-place scene; other scenes (e.g. ``tool_perturbation``) pass their own."""
     capture_dir = os.path.join(out_dir, "capture")
     os.makedirs(capture_dir, exist_ok=True)
-    objects = build_pick_place_scene()
+    objects = build_pick_place_scene() if objects is None else objects
+    object_names = OBJECT_NAMES if object_names is None else object_names
     scene = FlatScene(objects, device=device)
     cams = hemisphere_trajectory(
         n_views=cfg.n_views, radius=cfg.capture_radius, elevation_deg=cfg.capture_elevation_deg,
@@ -485,8 +490,8 @@ def generate_capture(out_dir: str, cfg: BenchmarkConfig, device: str = "cuda:0",
                     "cy": c.cy, "width": c.width, "height": c.height} for i, c in enumerate(cams)], f, indent=1)
     counts = {int(k): int((ids == k).sum()) for k in np.unique(ids)}
     with open(os.path.join(capture_dir, "capture_metadata.json"), "w") as f:
-        json.dump({"scene_version": SCENE_VERSION, "n_views": cfg.n_views, "seed_points_per_object": counts,
-                   "object_names": OBJECT_NAMES, "depth_noise_m_at_0.7m": cfg.depth_noise}, f, indent=1)
+        json.dump({"scene_version": scene_version, "n_views": cfg.n_views, "seed_points_per_object": counts,
+                   "object_names": object_names, "depth_noise_m_at_0.7m": cfg.depth_noise}, f, indent=1)
     if verbose:
         print(f"[capture] {cfg.n_views} views in {time.time() - t0:.1f}s; seed points per id: {counts}")
 
@@ -658,14 +663,14 @@ def _read_ply(path: str) -> Tuple[np.ndarray, np.ndarray]:
     return arr[:, :3].astype(np.float32), (arr[:, 3:6] / 255.0).astype(np.float32)
 
 
-def load_capture(dataset_dir: str, device: str = "cuda:0") -> CaptureData:
+def load_capture(dataset_dir: str, device: str = "cuda:0", objects: Optional[List] = None) -> CaptureData:
     cdir = os.path.join(dataset_dir, "capture")
     with open(os.path.join(cdir, "cameras.json")) as f:
         cams = [PinholeCamera(torch.tensor(c["c2w"], dtype=torch.float32, device=device), c["fx"], c["fy"],
                               c["cx"], c["cy"], c["width"], c["height"]) for c in json.load(f)]
     pts, cols = _read_ply(os.path.join(cdir, "fused_pointcloud.ply"))
     cap = CaptureData(
-        scene_objects=build_pick_place_scene(),
+        scene_objects=build_pick_place_scene() if objects is None else objects,
         images=torch.from_numpy(np.load(os.path.join(cdir, "images.npy"))).float() / 255.0,
         depths=torch.from_numpy(np.load(os.path.join(cdir, "depths.npy"))).float(),
         obj_masks=torch.from_numpy(np.load(os.path.join(cdir, "obj_masks.npy")).astype(np.int64)),

@@ -36,13 +36,13 @@ PSNR_TOL = 0.5
 def main(device: str = "cuda:0") -> dict:
     t0 = time.time()
     write_env_json(OUT)
-    generate_benchmark(DATASET_DIR, device=device)
+    cases = [Case("base", s) for s in range(N_SEEDS)]
+    generate_benchmark(DATASET_DIR, sequences=[c.sequence for c in cases], device=device)  # only what is tracked here
     cfg = get_v1_config(device)
     model, capture, dino, clip = train_or_load(cfg)
     grouping = build_groups(model, capture, cfg, clip=clip)
     summary = json.load(open(os.path.join(SCENE_CKPT_DIR, "train_summary.json")))
 
-    cases = [Case("base", s) for s in range(N_SEEDS)]
     df = run_suite(model, grouping, dino, cfg, cases, [MethodSpec("POGS", "POGS")], OUT,
                    runs_dir=os.path.join(OUT, "runs"), skip_existing=True)
 

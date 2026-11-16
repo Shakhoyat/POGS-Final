@@ -92,10 +92,12 @@ def train_or_load(
     ckpt_dir: str = SCENE_CKPT_DIR,
     force_train: bool = False,
     verbose: bool = True,
+    objects: Optional[List] = None,
 ):
     """Returns ``(model, capture, dino, clip)`` with ``dino``'s PCA basis set to
-    the one the model was distilled with."""
-    capture = load_capture(dataset_dir, device=cfg.runtime.device)
+    the one the model was distilled with. ``objects``: scene objects of another
+    scene (default: pick-place)."""
+    capture = load_capture(dataset_dir, device=cfg.runtime.device, objects=objects)
     dino, clip = load_encoders(cfg)
     version = dataset_scene_version(dataset_dir)
 
@@ -159,6 +161,8 @@ def build_groups(
     ckpt_dir: str = SCENE_CKPT_DIR,
     clip: Optional[OpenCLIPNetwork] = None,
     verbose: bool = True,
+    object_names: Optional[Dict[int, str]] = None,
+    object_queries: Optional[Dict[int, str]] = None,
 ) -> GroupingResult:
     """HDBSCAN on the distilled grouping features, then object selection.
     Ground truth is used ONLY to score the result (purity, IoU, matching)."""
@@ -171,13 +175,15 @@ def build_groups(
         labels = cluster_scene(model, cfg.grouping, verbose=verbose)
         np.save(labels_path, labels.cpu().numpy())
 
-    queries = [OBJECT_QUERIES[k] for k in sorted(OBJECT_QUERIES)]
+    names_map = OBJECT_NAMES if object_names is None else object_names
+    queries_map = OBJECT_QUERIES if object_queries is None else object_queries
+    queries = [queries_map[k] for k in sorted(queries_map)]
     keep, labels_sel = select_object_clusters(model, labels, cfg.grouping, clip=clip, queries=queries, verbose=verbose)
     groups = build_object_groups(model, labels_sel, keep_clusters=keep)
 
     gt = assign_gt_ids(model, capture.seed_points, capture.seed_obj_ids)
     group_to_gt = match_clusters_to_gt(groups, gt)
-    groups.names = [OBJECT_NAMES.get(group_to_gt[g], f"cluster_{groups.cluster_ids[g]}") for g in range(groups.num_groups)]
+    groups.names = [names_map.get(group_to_gt[g], f"cluster_{groups.cluster_ids[g]}") for g in range(groups.num_groups)]
     iou = group_gt_iou(groups, gt, group_to_gt)
     report = {
         "n_clusters": int(labels.max()) + 1,
@@ -188,7 +194,7 @@ def build_groups(
              "name": groups.names[g], "n_gaussians": int(groups.group_masks[g].sum()), "iou_vs_gt": iou[g]}
             for g in range(groups.num_groups)
         ],
-        "gt_objects_missing": sorted(set(OBJECT_NAMES) - set(group_to_gt.values())),
+        "gt_objects_missing": sorted(set(names_map) - set(group_to_gt.values())),
         "duplicate_matches": sorted({v for v in group_to_gt.values() if list(group_to_gt.values()).count(v) > 1}),
     }
     write_json(os.path.join(ckpt_dir, "object_clusters.json"), report)
