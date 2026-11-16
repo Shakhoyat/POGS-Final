@@ -26,6 +26,7 @@ STAGES=(
   "o1|$PY -m experiments.o1_grouping_splats"
   "o3_smoke|$PY -m experiments.o3_perturbation --seeds 0"
   "o3|$PY -m experiments.o3_perturbation"
+  "o6|$PY -m experiments.o6_speed"
   "v1|$PY -m experiments.v1_base_pogs.run_all --no-videos"
   "v2|$PY -m experiments.v2_kalman_pogs.run_all --no-videos"
   "realtime|$PY -m experiments.realtime.run_all --no-videos"

@@ -11,9 +11,10 @@ the plan; the reason is logged).
 `done` only when its evidence is in the repository.
 
 ## ▶ Resume here
-- **Unattended pipeline:** `tools/run_pipeline.sh --detach | --status | --stop | --only <stage> | --redo <stage>`. Stages: tests → repro (0.4) → o1 → o3_smoke → o3 → v1 → v2 → realtime → v3. State + logs in `data_results/_pipeline/` (`<stage>.done|failed|log`, `status.tsv`). Failed stages are skipped over and retried on the next start. Started 2026-11-17 05:07.
+- **Unattended pipeline:** `tools/run_pipeline.sh --detach | --status | --stop | --only <stage> | --redo <stage>`. Stages: tests → repro (0.4) → o1 → o3_smoke → o3 → o6 (4.x) → v1 → v2 → realtime → v3. State + logs in `data_results/_pipeline/` (`<stage>.done|failed|log`, `status.tsv`). Failed stages are skipped over and retried on the next start. Started 2026-11-17 05:07.
+- **Never edit `tools/run_pipeline.sh` while it runs** (bash reads it incrementally; the stage list is fixed at start). To add a stage: `kill <wrapper pid>` (not `--stop`, which also kills the experiment), edit, `--detach`; stages already `.done` are skipped.
 - **On resume:** run `--status`; read `.log` of any FAILED stage, fix, `--detach` again. Then fill the step rows below from `data_results/{repro_check/report.json, o1_grouping/metrics.json, o3_perturbation/summary.md}`.
-- **Not automated yet (no code):** O4 in-grasp trials (3.2–3.3), O6 profile + speed candidates (4.x), O5 re-benchmark (5.x), report figures (6.x). Add each as a line in `STAGES` when written.
+- **Not automated yet (no code):** O4 in-grasp trials (3.2–3.3), O5 re-benchmark (5.x), report figures (6.x). Add each as a line in `STAGES` when written.
 - **Untested code in the pipeline:** `o3_perturbation` (first real run is stage `o3_smoke`).
 - **Rules:** run cache keyed by `ckpt_id`; the 2026-11-10 results are git tag `results-2026-11-10` (v1/v2/realtime/v3 stages overwrite `data_results/` with the new checkpoint's numbers).
 - **Env:** `.venv` → `~/venvs/pogs-py312`. Py 3.12.16, torch 2.14.1+cu130, gsplat 1.5.3; pins `requirements-lock.txt`.
@@ -57,8 +58,8 @@ the plan; the reason is logged).
 ### Phase 4: O6 5 Hz tracking
 | Step | Description | Status | Started | Finished | Evidence | Notes |
 |---|---|---|---|---|---|---|
-| 4.1 | Per-stage profile | todo | | | | |
-| 4.2 | Speed candidates on 54 cases + 30 Hz protocol | todo | | | | |
+| 4.1 | Per-stage profile | doing | 2026-11-17 | | `experiments/o6_speed.py` → `data_results/o6_speed/profile.txt` | In pipeline stage `o6`; untested |
+| 4.2 | Speed candidates on 54 cases + 30 Hz protocol | doing | 2026-11-17 | | same | Narrowed: base condition, 3 seeds, iters {25,15,10,5} × match_res {500,350,250} × {POGS, KF+check} + Static; 54-case / 30 Hz re-check only for the chosen config |
 | 4.3 | Cheapest ≥ 5 Hz configuration + accuracy cost | todo | | | | |
 
 ### Phase 5: O5 foundation-model latency
