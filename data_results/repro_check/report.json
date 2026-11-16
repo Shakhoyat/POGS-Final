@@ -1,0 +1,65 @@
+{
+  "ckpt_id": "3c48bc6afeae",
+  "psnr_mean": 34.02498850799153,
+  "psnr_ref": 34.1,
+  "psnr_ok": true,
+  "n_gaussians": 333039,
+  "iou": {
+    "mustard_bottle": 0.9803407601572739,
+    "soup_can": 0.6414788389816767,
+    "ceramic_mug": 0.7990932951562872,
+    "red_apple": 0.9565078349856092,
+    "cereal_box": 0.8879693486590038
+  },
+  "iou_ref": {
+    "mustard_bottle": 0.98,
+    "red_apple": 0.95,
+    "cereal_box": 0.88,
+    "ceramic_mug": 0.8,
+    "soup_can": 0.67
+  },
+  "iou_ok": {
+    "mustard_bottle": true,
+    "red_apple": true,
+    "cereal_box": true,
+    "ceramic_mug": true,
+    "soup_can": true
+  },
+  "gt_objects_missing": [],
+  "base_pogs_new": {
+    "adds_success": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mean_pos_err_cm": [
+      0.9344651025371602,
+      0.8374517604951095,
+      0.8258309660343507
+    ],
+    "fps": [
+      1.7498775195377354,
+      1.5530028599618413,
+      1.809344890991097
+    ]
+  },
+  "base_pogs_ref": {
+    "adds_success": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mean_pos_err_cm": [
+      0.8968056718799123,
+      0.8119700094541248,
+      0.8199012624053436
+    ],
+    "fps": [
+      1.669496779595409,
+      1.827093139101844,
+      1.786956842198096
+    ]
+  },
+  "exit_100pct_adds": true,
+  "minutes": 4.255448114871979
+}

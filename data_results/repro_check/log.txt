@@ -1,0 +1,44 @@
+Downloading: "https://github.com/facebookresearch/dinov2/zipball/main" to /home/vscode/.cache/torch/hub/main.zip
+/home/vscode/.cache/torch/hub/facebookresearch_dinov2_main/dinov2/layers/swiglu_ffn.py:51: UserWarning: xFormers is not available (SwiGLU)
+  warnings.warn("xFormers is not available (SwiGLU)")
+/home/vscode/.cache/torch/hub/facebookresearch_dinov2_main/dinov2/layers/attention.py:33: UserWarning: xFormers is not available (Attention)
+  warnings.warn("xFormers is not available (Attention)")
+/home/vscode/.cache/torch/hub/facebookresearch_dinov2_main/dinov2/layers/block.py:40: UserWarning: xFormers is not available (Block)
+  warnings.warn("xFormers is not available (Block)")
+Downloading: "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_pretrain.pth" to /home/vscode/.cache/torch/hub/checkpoints/dinov2_vits14_pretrain.pth
+  0%|          | 0.00/84.2M [00:00<?, ?B/s]  4%|▍         | 3.75M/84.2M [00:00<00:02, 38.8MB/s] 18%|█▊        | 15.0M/84.2M [00:00<00:00, 84.8MB/s] 31%|███       | 26.1M/84.2M [00:00<00:00, 99.2MB/s] 44%|████▍     | 37.4M/84.2M [00:00<00:00, 106MB/s]  58%|█████▊    | 48.6M/84.2M [00:00<00:00, 110MB/s] 71%|███████   | 59.9M/84.2M [00:00<00:00, 112MB/s] 84%|████████▍ | 71.1M/84.2M [00:00<00:00, 114MB/s] 98%|█████████▊| 82.2M/84.2M [00:00<00:00, 115MB/s]100%|██████████| 84.2M/84.2M [00:00<00:00, 107MB/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[train] 35 views, 19000 seed points
+[dino] backend=torch.hub/dinov2 pretrained=True
+[dino] (35, 50, 90, 64) in 6.2s
+[masks] object masks per view: min=5 mean=5.0 max=5
+  clip pyramid scale 1/10 (tile=18px, grid=22x38)
+  clip pyramid scale 2/10 (tile=35px, grid=14x25)
+  clip pyramid scale 3/10 (tile=53px, grid=14x25)
+  clip pyramid scale 4/10 (tile=71px, grid=11x19)
+  clip pyramid scale 5/10 (tile=89px, grid=9x15)
+  clip pyramid scale 6/10 (tile=108px, grid=7x12)
+  clip pyramid scale 7/10 (tile=126px, grid=6x11)
+  clip pyramid scale 8/10 (tile=144px, grid=6x9)
+  clip pyramid scale 9/10 (tile=161px, grid=5x8)
+  clip pyramid scale 10/10 (tile=180px, grid=5x8)
+[clip] pyramid built in 69.5s
+[train] rasteriser backend: gsplat
+  [    0/4000] loss=0.2260 rgb=0.2250 depth=0.0200 dino=0.0000 clip=0.000 grp=0.000 nnv=0.000 N=19000 (1s)
+  [  100/4000] loss=0.0801 rgb=0.0799 depth=0.0030 dino=0.0000 clip=0.000 grp=0.000 nnv=0.000 N=19000 (3s)
+  [  200/4000] loss=0.1986 rgb=0.0562 depth=0.0033 dino=0.1416 clip=0.000 grp=0.000 nnv=0.000 N=19000 (6s)
+  [  300/4000] loss=0.1589 rgb=0.0402 depth=0.0057 dino=0.1153 clip=0.000 grp=0.000 nnv=0.000 N=19000 (9s)
+  [  400/4000] loss=0.1531 rgb=0.0369 depth=0.0056 dino=0.1095 clip=0.000 grp=0.000 nnv=0.000 N=19000 (12s)
+  [  500/4000] loss=0.1553 rgb=0.0398 depth=0.0038 dino=0.1060 clip=0.000 grp=0.000 nnv=0.000 N=19000 (15s)
+  [  600/4000] loss=0.1940 rgb=0.0701 depth=0.0111 dino=0.1115 clip=0.000 grp=0.000 nnv=0.000 N=26403 (18s)
+  [  700/4000] loss=0.1591 rgb=0.0386 depth=0.0043 dino=0.1055 clip=0.000 grp=0.000 nnv=0.000 N=40330 (21s)
+  [  800/4000] loss=0.1599 rgb=0.0384 depth=0.0064 dino=0.1077 clip=0.000 grp=0.000 nnv=0.000 N=59158 (24s)
+  [  900/4000] loss=0.1625 rgb=0.0447 depth=0.0089 dino=0.1063 clip=0.000 grp=0.000 nnv=0.000 N=79571 (27s)
+  [ 1000/4000] loss=0.1307 rgb=0.0266 depth=0.0033 dino=0.0957 clip=0.000 grp=0.000 nnv=0.000 N=100907 (31s)
+  [ 1100/4000] loss=0.1452 rgb=0.0371 depth=0.0079 dino=0.1017 clip=0.000 grp=0.000 nnv=0.000 N=122184 (34s)
+  [ 1200/4000] loss=1044.1150 rgb=0.0227 depth=0.0024 dino=0.1020 clip=0.000 grp=0.000 nnv=1043.986 N=142680 (39s)
+  [ 1300/4000] loss=300.2104 rgb=0.0189 depth=0.0084 dino=0.1048 clip=0.000 grp=0.000 nnv=300.083 N=162784 (44s)
+  [ 1400/4000] loss=164.9651 rgb=0.0121 depth=0.0062 dino=0.1018 clip=0.000 grp=0.000 nnv=164.848 N=181436 (49s)
+  [ 1500/4000] loss=111.0136 rgb=0.0149 depth=0.0020 dino=0.1070 clip=0.000 grp=0.000 nnv=110.889 N=197622 (55s)
+  [ 1600/4000] loss=79.7451 rgb=0.0286 depth=0.0178 dino=0.1230 clip=0.000 grp=0.000 nnv=79.590 N=211737 (61s)
+  [ 1700/4000] loss=61.8128 rgb=0.0136 depth=0.0028 dino=0.1013 clip=0.000 grp=0.000 nnv=61.696 N=223390 (66s)
