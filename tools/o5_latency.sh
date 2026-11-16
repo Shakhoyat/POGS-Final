@@ -6,6 +6,8 @@
 # (needs detectron2; not buildable on Python 3.12 / torch 2.14 -> old-stack number, labelled).
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+# Gated models (DINOv3): take the token from huggingface's own token file; never from the repo.
+if [ -z "${HF_TOKEN:-}" ] && [ -f ~/.cache/huggingface/token ]; then export HF_TOKEN="$(cat ~/.cache/huggingface/token)"; fi
 V=~/venvs/pogs-o5
 UV=~/.local/bin/uv
 if [ ! -x "$V/bin/python" ]; then
