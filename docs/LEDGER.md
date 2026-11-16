@@ -11,11 +11,10 @@ the plan; the reason is logged).
 `done` only when its evidence is in the repository.
 
 ## ▶ Resume here
-- **Running:** 0.4 `experiments/reproduce_check.py` (bg; log `data_results/repro_check/log.txt`, result `report.json`). If not running and no `report.json`: relaunch `source tools/cuda_env.sh && nohup .venv/bin/python -u -m experiments.reproduce_check > data_results/repro_check/log.txt 2>&1 &` (data + checkpoint are reused if present).
-- **Then:** fill 0.4 row from `report.json`; run `python -m experiments.o1_grouping_splats` (1.1–1.3); commit.
-- **Do not** run `experiments.*.run_all` against the old cache expecting reuse: rows now carry `ckpt_id` and rows of the old (lost) checkpoint are re-run. Old rows stay on disk as the 2026-11-10 reference.
-- **Env:** `.venv` → `~/venvs/pogs-py312` (ext4). Py 3.12.16, torch 2.14.1+cu130, gsplat 1.5.3, torchmetrics 1.9.0; pins `requirements-lock.txt`. Rebuild: `uv venv --python 3.12 --seed ~/venvs/pogs-py312`; torch from `download.pytorch.org/whl/cu130`; `uv pip install -r requirements.txt`; `bash tools/setup_gsplat.sh`.
-- **Tests:** `source tools/cuda_env.sh && .venv/bin/python -m pytest -q -p no:cacheprovider tests` (26 expected; `.pytest_cache` can't be written on /mnt/e).
+- **State (2026-11-17):** first 0.4 run died with the session (no checkpoint). Relaunched: `reproduce_check` (renders only base_s0–2) then `o1_grouping_splats`. Results: `data_results/repro_check/report.json`, `data_results/o1_grouping/metrics.json`. If neither exists and nothing runs: `source tools/cuda_env.sh && .venv/bin/python -u -m experiments.reproduce_check && .venv/bin/python -u -m experiments.o1_grouping_splats`.
+- **Next:** fill 0.4 / 1.x rows; smoke-test `python -m experiments.o3_perturbation --seeds 0` (tool scene + runner are written but never executed); then full O3 with jump sweep to 90° (PLAN §7 C3).
+- **Rules:** run cache is keyed by `ckpt_id`; old `data_results/benchmark_runs` rows are the 2026-11-10 reference only. Re-run only what tables need (C5).
+- **Env:** `.venv` → `~/venvs/pogs-py312`. Py 3.12.16, torch 2.14.1+cu130, gsplat 1.5.3; pins `requirements-lock.txt`. Tests: `source tools/cuda_env.sh && .venv/bin/python -m pytest -q -p no:cacheprovider tests` (26).
 
 ## Step status
 
@@ -40,7 +39,7 @@ the plan; the reason is logged).
 | Step | Description | Status | Started | Finished | Evidence | Notes |
 |---|---|---|---|---|---|---|
 | 2.1 | Supervisor questions sent; `experiments/protocols/o3.md` committed before runs | doing | 2026-11-13 | | `experiments/protocols/o3.md` (draft) | Needs a new `tool_table` scene + checkpoint (pick-place has no tool). Freeze after Q1–3 answered |
-| 2.2 | Full-rotation object frames; step-wise and single-jump trajectories | todo | | | | |
+| 2.2 | Full-rotation object frames; step-wise and single-jump trajectories | doing | 2026-11-13 | | `data/scene_generator/tool_perturbation.py`, `experiments/o3_perturbation.py` (`df21131`) | Written, schedules unit-checked, never rendered/tracked. Trials start at scanned pose + tracked settle (≤5 cm, ≤45°) |
 | 2.3 | `kl_gaussians` + unit tests | done | 2026-11-13 | 2026-11-13 | `metrics/gaussian.py`, `tests/test_metrics.py` | Done early with 0.3; tests: identity, translation closed form, isotropic closed form, monotone in rotation, ±5° round trip |
 | 2.4 | `kl_render` (GT-free) + test | done | 2026-11-13 | 2026-11-13 | `metrics/gaussian.py::kl_render`, test in `tests/test_metrics.py` | RGB 8³ histogram KL in rendered mask; feature-space variant may follow |
 | 2.5 | Per-step errors, KL; step-size sweep | todo | | | | |
@@ -106,10 +105,8 @@ Anything that departs from the plan, the paper, the release or the brief. Never 
 | 2026-11-13 | 0.4 | Reproduction check in a fresh dir (`data_results/repro_check/runs`), not the shared cache | Keeps the 2026-11-10 rows intact as the reference |
 | 2026-11-13 | 1.2 | O1 uses amodal GT masks and black background | Occlusion by other objects must not count as leakage; black makes alpha and holes unambiguous |
 | 2026-11-13 | 2.4 | `kl_render` smoothing 0.01/bin (not 1) | Add-1 over 512 bins swamps a few-hundred-pixel object |
+| 2026-11-17 | plan | Critique C1–C11 added to PLAN §7; protocols run provisional without waiting for supervisor (C2); jump sweep to 90° (C3); selective re-runs (C5) | See PLAN §7 |
+| 2026-11-13 | 2.2 | O3 trials start at the scanned pose and settle to a random start pose | Random initial pose would mix initialisation failures into recovery |
 
 ## Session log
-
-### 2026-11-13
-- Plan revised; ledger created. Env (0.1) + tests (0.2) + metrics (0.3, 2.3) done → `74bdef2`.
-- 0.4 launched (`reproduce_check`); cache keyed by `ckpt_id`; `env.json` writer fixed to collect before opening.
-- Written while GPU busy: O1 script (1.1/1.2), `kl_render` (2.4), draft protocols O3/O4 (2.1/3.1).
+Dropped (C11): history is in git log and the tables above.

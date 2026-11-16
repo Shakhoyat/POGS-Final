@@ -168,3 +168,19 @@ These are the points a strict A*/Q1 reviewer would raise. Each one has a decisio
 | 3 | 3, 4 |
 | 4 | 5, 6 (report to supervisor) |
 | 5+ | 7 (paper) |
+
+## 7. Critique of this plan (2026-11-17) and the changes it forces
+
+| # | Weakness | Change |
+|---|---|---|
+| C1 | **Contribution is decided last (Phase 7).** Which experiments matter depends on the paper's claim; without it Phases 2–5 can produce a report but not a paper. | Decide the headline after Phase 2/4 pilot numbers, not after Phase 6. Candidates stay as in §2.8; default = latency-aware tracking (O6) + GT-free loss-of-track signal. |
+| C2 | **Blocked on answers nobody was asked for.** §5 questions were never sent; Phase 2 waited on them. | Run with the stated defaults (both KLs, both protocols, 3 cm / 5°), mark protocols "provisional", send the questions with the first results. |
+| C3 | **O3 as specified cannot fail informatively.** ±5° steps, no occluder, exact poses: likely 100 % everywhere, and "recovery angle 30°" is then a ceiling we set, not a limit we found. | Extend the jump sweep past 30° (45, 60, 90) until recovery breaks, so the reported angle is a measured boundary. |
+| C4 | **One trained model.** Every tracking number is conditional on a single checkpoint; seeds vary trajectories only. | State it as a threat; O1 and the O3 headline rows get 3 training seeds if GPU time allows, otherwise the limitation is written in the report. |
+| C5 | **GPU budget never estimated.** The old run cache is invalid (checkpoint lost), so "all 54 cases × 13 methods" ≈ 700 runs ≈ 8–10 h plus ~1 min rendering per sequence. | Re-run only what a report table needs: 54 cases × {Static, POGS} first; KF / iteration sweeps on the factors where they are claimed. |
+| C6 | **`kl_render` is RGB; POGS tracks DINO features.** A colour histogram is a weak, viewpoint-blind proxy. | Keep as baseline signal; compare against the tracker's own DINO loss as a loss-of-track detector (AUROC on lost vs. tracked frames) before claiming anything. |
+| C7 | **Index-matched KL is redundant** (§2.1) and heavy-tailed. | Reported because requested; never used as evidence separate from pose error. |
+| C8 | **O5 port may not be feasible.** Detic needs detectron2, unlikely to build on Python 3.12 / torch 2.14. | Time-box to 1 day; models that cannot run on the target stack keep their old-stack number, labelled with the stack. |
+| C9 | **Timing on WSL + NTFS, GPU shared with the desktop.** Hz numbers carry I/O and contention noise. | Preload frames to RAM for timing runs; report hardware, repeat timing 3×, give spread. |
+| C10 | **External validity.** Primitive-based renderer, exact camera poses, synthetic depth noise. No real sequence until Phase 7. | Unchanged scope for the report; stated in Limitations. A real RGB-D capture is the first Phase 7 item, not optional for a robotics venue. |
+| C11 | **Process overhead.** Ledger rows per sub-step and per-session logs cost more than they return. | Ledger keeps: resume block, one line per step, deviations. No narrative log. |
