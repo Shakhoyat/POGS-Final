@@ -8,7 +8,8 @@ source tools/cuda_env.sh >/dev/null 2>&1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 echo "[e2] start $(date -Is)" >> $S/e2.log
 pids=()
-for k in 0 1; do .venv/bin/python -u -m experiments.e2_information --trials 10 --shard $k --nshards 2 >> $S/e2_shard$k.log 2>&1 & pids+=($!); sleep 20; done
+N=${E2_SHARDS:-1}   # 2026-11-23: parallel shards stall on this GPU (see LEDGER); default 1
+for ((k=0; k<N; k++)); do .venv/bin/python -u -m experiments.e2_information --trials 10 --shard $k --nshards $N >> $S/e2_shard$k.log 2>&1 & pids+=($!); sleep 20; done
 rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done
 if [ $rc -eq 0 ] && .venv/bin/python -m experiments.e2_information --summarise >> $S/e2.log 2>&1; then
   echo "[e2] done $(date -Is)" >> $S/e2.log; touch $S/e2.done
