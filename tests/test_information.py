@@ -120,3 +120,28 @@ def test_symmetry_breaking_mark_restores_roll_information():
     rel = [observability_summary(gauss_newton_info(make_res(n))["H"], 0.08,
                                  np.array([1.0, 0, 0]))["roll_info_rel"] for n in (4, 40)]
     assert 0 < rel[0] < rel[1]
+
+
+def test_pose_to_part_delta_round_trip():
+    from model.pogs.information import pose_to_part_delta
+    pd = _rand_pd(5).float()
+    c0 = np.array([0.1, -0.2, 0.05])
+    T = posevec_to_matrix(pd.unsqueeze(0).double())[0].numpy()
+    T[:3, 3] += c0                                   # part2world translation = c0 + t
+    back = pose_to_part_delta(T, c0)
+    assert torch.allclose(back[:3], pd[:3], atol=1e-6)
+    assert torch.allclose(back[3:] * torch.sign(back[3] * pd[3]), pd[3:], atol=1e-5)
+
+
+def test_regression_hessian_quadratic_and_smooths_noise():
+    from model.pogs.information import loss_hessian_regression
+    rng = np.random.default_rng(3)
+    A = torch.tensor(rng.normal(size=(30, 6)))
+    b = torch.tensor(rng.normal(size=30))
+    Hq = (A.T @ A).numpy()
+    out = loss_hessian_regression(lambda d: 0.5 * ((A @ d + b) ** 2).sum(), 0.02, 0.003, n=12)
+    assert np.allclose(out["H"], Hq, rtol=1e-6, atol=1e-6) and out["fit_resid"] < 1e-8
+    # a small high-frequency ripple (sub-pixel non-smoothness) barely moves the fitted curvature
+    rip = lambda d: 0.5 * ((A @ d + b) ** 2).sum() + 1e-4 * torch.sin(4000.0 * d).sum()
+    out2 = loss_hessian_regression(rip, 0.02, 0.003, n=24)
+    assert np.abs(out2["H"] - Hq).max() / np.abs(Hq).max() < 0.25

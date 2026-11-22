@@ -296,6 +296,10 @@ class _FrameTracker:
         info = opt.step(niter=tcfg.track_niter, use_depth=tcfg.use_depth, use_rgb=tcfg.use_rgb)
         _sync()
         opt_ms = (time.time() - t_o) * 1000.0
+        # optional analysis hook (plan rev. 2, E2): sees the optimiser and observation after the
+        # step, before any fusion; not part of opt_ms. No existing prior defines it.
+        if prior is not None and hasattr(prior, "observe"):
+            prior.observe(opt, obs)
 
         # ---- motion prior: measurement update ----------------------------- #
         if prior is not None:
