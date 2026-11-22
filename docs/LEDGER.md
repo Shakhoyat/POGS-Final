@@ -105,7 +105,7 @@ the plan; the reason is logged).
 | 8.E3 | Ladder on O4 (P2) | todo | | | | Needs T7 freeze first |
 | 8.T5 | Weak-axis orbit belief (M4) | todo | | | | |
 | 8.T6 | Calibration + recovery metrics (NEES, NIS, coverage, NLL, bootstrap, survival, RRTrack event) | done | 2026-11-22 | 2026-11-22 | `metrics/calibration.py`, `tests/test_calibration.py` (6 passed) | NEES consistency uses the chi2 interval of the mean; circular NLL with uniform reference log 2π; hierarchical bootstrap shown to widen under splat-seed clustering. NIS = NEES on the innovation (same function) |
-| 8.T7 | ≥ 3 splats per scene; freeze `experiments/protocols/e_series.md`; tag | todo | | | | Before any E3 run |
+| 8.T7 | ≥ 3 splats per scene; freeze `experiments/protocols/e_series.md`; tag | doing | 2026-11-23 | | Draft: `experiments/protocols/e_series.md` (splits: calibration seeds 40–49, test 0–39; methods S/P/KF/TR/FU/OR/MS; rules in order; P1–P4 pass rules; stats) | Freeze = git tag `e-series-frozen` after E0/E2 full results are read and ≥ 3 splats exist. P1 threshold deliberately not loosened after the failing smoke |
 | 8.E4–E6, E9 | Calibration, 2×2 decal × gripper, compute gating, recovery events | todo | | | | |
 | 8.T8 | YCBInEOAT / HO3D loader, ADD/ADD-S AUC | todo | | | | Gate G2 (Dec 22) |
 | 8.E7–E8, E10 | Real benchmark, frame downsampling, efficiency | todo | | | | Gate G3 (Feb 7) |
