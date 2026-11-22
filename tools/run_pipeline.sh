@@ -28,7 +28,7 @@ STAGES=(
   "o6|$PY -m experiments.o6_speed"
   "o3|$PY -m experiments.o3_perturbation"
   "o4_smoke|$PY -m experiments.o4_ingrasp --trials 2"
-  "o4|$PY -m experiments.o4_ingrasp"
+  "o4|bash tools/o4_parallel.sh 3"
   "o5|bash tools/o5_latency.sh"
   "v1|$PY -m experiments.v1_base_pogs.run_all --no-videos"
   "v2|$PY -m experiments.v2_kalman_pogs.run_all --no-videos"

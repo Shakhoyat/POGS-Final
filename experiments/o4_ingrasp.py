@@ -49,12 +49,35 @@ def judge(per_frame: dict) -> dict:
             "rot_err_pre_deg": float(rot[p0 - 1]), "p0": p0}
 
 
-def main(trials: int, device: str = "cuda:0") -> pd.DataFrame:
+def _method_names():
+    return ["Static (no motion)"] + [m[0] for m in METHODS]
+
+
+def aggregate(trials: int) -> pd.DataFrame:
+    """Collect every cached row.json (all shards) into summary.csv / summary.md."""
+    rows = []
+    for c in o4_cases(range(trials)):
+        for name in _method_names():
+            rp = os.path.join(OUT, "runs", c.name, _slug(name), "row.json")
+            if os.path.exists(rp):
+                row = json.load(open(rp))
+                if row.get("ckpt_id") == pipeline.CKPT_ID:
+                    rows.append(row)
+    df = pd.DataFrame(rows)
+    df.to_csv(os.path.join(OUT, "summary.csv"), index=False)
+    write_summary(df)
+    print(f"[o4] aggregated {len(df)} rows ({len(df) / len(_method_names()):.0f} cases of {trials * 4})", flush=True)
+    return df
+
+
+def main(trials: int, device: str = "cuda:0", shard: int = 0, nshards: int = 1) -> pd.DataFrame:
+    """Shard k of n handles cases with index % n == k, so n processes can share one GPU."""
     os.makedirs(OUT, exist_ok=True)
-    write_env_json(OUT)
+    if shard == 0:
+        write_env_json(OUT)
     if not os.path.exists(os.path.join(TOOL_DATASET_DIR, "capture", "images.npy")):
         generate_tool_capture(TOOL_DATASET_DIR, device=device)
-    cases = o4_cases(range(trials))
+    cases = [c for i, c in enumerate(o4_cases(range(trials))) if i % nshards == shard]
     for c in cases:
         if not os.path.exists(os.path.join(TOOL_DATASET_DIR, c.name, "tracking_metadata.json")):
             generate_grasp_sequence(c, TOOL_DATASET_DIR, device=device, verbose=False)
@@ -89,10 +112,9 @@ def main(trials: int, device: str = "cuda:0") -> pd.DataFrame:
             rows.append(row)
         if c.seed % 10 == 0:
             print(f"[o4] {c.name} done", flush=True)
-    df = pd.DataFrame(rows)
-    df.to_csv(os.path.join(OUT, "summary.csv"), index=False)
-    write_summary(df)
-    return df
+    if nshards == 1:
+        return aggregate(trials)
+    return pd.DataFrame(rows)
 
 
 def write_summary(df: pd.DataFrame) -> None:
@@ -114,5 +136,11 @@ def write_summary(df: pd.DataFrame) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=50)
+    ap.add_argument("--shard", type=int, default=0)
+    ap.add_argument("--nshards", type=int, default=1)
+    ap.add_argument("--aggregate", action="store_true", help="only rebuild summary from cached rows")
     a = ap.parse_args()
-    main(a.trials)
+    if a.aggregate:
+        aggregate(a.trials)
+    else:
+        main(a.trials, shard=a.shard, nshards=a.nshards)

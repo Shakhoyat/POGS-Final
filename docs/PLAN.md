@@ -113,6 +113,12 @@ These are the points a strict A*/Q1 reviewer would raise. Each one has a decisio
 - [ ] 3.3 Rate + Wilson 95 % CI per method; verdict "met" / "not met" / "inconclusive (CI spans 80 %)".
       Paper's 48/50 and 40/50 as reference only.
 
+- [x] 3.4 Resource use (decided 2026-11-22): accuracy experiments (O3/O4, v1–v3 accuracy) may share the GPU, so
+      `tools/o4_parallel.sh N` runs O4 as N shards (`--shard k --nshards N`, case index % N, disjoint `row.json`
+      files, then `--aggregate`). N=3 fits 12 GB VRAM (4 shards filled it). Latency stages (o5, o6, realtime)
+      still run alone: a shared GPU would corrupt their timings. WSL RAM 28 GB (`C:\Users\User\.wslconfig`).
+      Reboot cause: Windows power-off (Start menu 16:25) and one unclean reboot (09:13), not WSL; keep the PC awake.
+
 **Exit:** 4 settings × methods table.
 
 ### Phase 4: O6 5 Hz tracking, ~3 days
