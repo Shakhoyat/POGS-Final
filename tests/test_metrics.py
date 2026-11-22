@@ -134,3 +134,41 @@ def test_kl_render_zero_when_equal_and_rises_when_off_object():
     assert kls[0] < kls[1] < kls[2] < kls[3]                    # render sliding off the object
     assert kls[3] > 5.0                                          # 20 px = fully off: large
     assert math.isnan(kl_render(img, img, torch.zeros_like(mask)))
+
+
+def _rot(axis, deg):
+    from metrics.pose import _rodrigues
+    return _rodrigues(np.asarray(axis, float), math.radians(deg))
+
+
+def test_swing_twist_pure_roll_and_pure_swing():
+    from metrics.pose import swing_twist_deg
+    x = np.array([1.0, 0.0, 0.0])
+    tw, sw = swing_twist_deg(_rot(x, 30.0), x)
+    assert abs(tw - 30.0) < 1e-6 and abs(sw) < 1e-6
+    tw, sw = swing_twist_deg(_rot(x, -12.0), x)
+    assert abs(tw + 12.0) < 1e-6
+    tw, sw = swing_twist_deg(_rot([0, 0, 1], 7.0), x)
+    assert abs(tw) < 1e-6 and abs(sw - 7.0) < 1e-6
+
+
+def test_swing_twist_composition_recovers_both():
+    from metrics.pose import swing_twist_deg
+    x = np.array([1.0, 0.0, 0.0])
+    R = _rot([0, 1, 0], 9.0) @ _rot(x, 25.0)          # swing after twist
+    tw, sw = swing_twist_deg(R, x)
+    assert abs(tw - 25.0) < 1e-6 and abs(sw - 9.0) < 1e-6
+
+
+def test_roll_free_rule_ignores_bit_axis_roll():
+    from metrics.pose import roll_swing_error_deg, tool_success_roll_free
+    x = np.array([1.0, 0.0, 0.0])
+    G = np.eye(4)
+    P = np.eye(4)
+    P[:3, :3] = _rot(x, 20.0)                          # 20 deg roll only
+    roll, swing = roll_swing_error_deg(P, G, x)
+    assert abs(roll - 20.0) < 1e-6 and swing < 1e-6
+    assert rotation_error_deg(P, G) > 5.0              # pre-registered rule fails
+    assert tool_success_roll_free(1.0, swing)          # paper-faithful rule passes
+    P[:3, :3] = _rot([0, 0, 1], 6.0)
+    assert not tool_success_roll_free(1.0, roll_swing_error_deg(P, G, x)[1])

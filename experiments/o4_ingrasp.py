@@ -28,7 +28,7 @@ from data.scene_generator.pick_place_benchmark import load_sequence
 from data.scene_generator.tool_perturbation import (
     TOOL_DATASET_DIR, generate_grasp_sequence, generate_tool_capture, o4_cases,
 )
-from metrics.pose import SUCCESS_POS_CM, SUCCESS_ROT_DEG
+from metrics.pose import SUCCESS_POS_CM, SUCCESS_ROT_DEG, tool_success_roll_free
 from metrics.stats import mean_std, target_verdict, wilson_interval
 from model.pogs.checkpoint import write_json
 from model.pogs.evaluate import static_baseline, track_sequence, variant_config
@@ -36,6 +36,10 @@ from model.pogs.evaluate import static_baseline, track_sequence, variant_config
 OUT = "data_results/o4_ingrasp"
 N_AFTER = 10
 TARGET = 0.80
+ROW_SCHEMA = 2
+"""2: per-frame record stores full SE(3) plus roll/swing about the bit axis, and rows carry the
+paper-faithful roll-free rule (plan rev. 2, E0; LEDGER deviation 2026-11-22). Rows of an older schema
+are re-run, not reused."""
 
 
 def judge(per_frame: dict) -> dict:
@@ -43,10 +47,17 @@ def judge(per_frame: dict) -> dict:
     p0 = ph.index("perturbed")
     k = min(p0 + N_AFTER, len(ph) - 1)
     tip, rot, pos = (np.asarray(per_frame[x]) for x in ("tip_err_cm", "rot_err_deg", "pos_err_cm"))
-    ok = bool(tip[k] < SUCCESS_POS_CM and rot[k] < SUCCESS_ROT_DEG and np.nanmax(pos[p0:]) <= LOST_CM)
-    return {"success": ok, "tip_err_at_N_cm": float(tip[k]), "rot_err_at_N_deg": float(rot[k]),
-            "max_pos_err_after_cm": float(np.nanmax(pos[p0:])), "tip_err_pre_cm": float(tip[p0 - 1]),
-            "rot_err_pre_deg": float(rot[p0 - 1]), "p0": p0}
+    never_lost = bool(np.nanmax(pos[p0:]) <= LOST_CM)
+    ok = bool(tip[k] < SUCCESS_POS_CM and rot[k] < SUCCESS_ROT_DEG and never_lost)
+    out = {"success": ok, "tip_err_at_N_cm": float(tip[k]), "rot_err_at_N_deg": float(rot[k]),
+           "max_pos_err_after_cm": float(np.nanmax(pos[p0:])), "tip_err_pre_cm": float(tip[p0 - 1]),
+           "rot_err_pre_deg": float(rot[p0 - 1]), "p0": p0}
+    if "swing_err_deg" in per_frame:
+        roll, swing = np.asarray(per_frame["roll_err_deg"]), np.asarray(per_frame["swing_err_deg"])
+        out.update({"success_rollfree": bool(tool_success_roll_free(tip[k], swing[k]) and never_lost),
+                    "swing_at_N_deg": float(swing[k]), "roll_at_N_deg": float(roll[k]),
+                    "swing_pre_deg": float(swing[p0 - 1]), "roll_pre_deg": float(roll[p0 - 1])})
+    return out
 
 
 def _method_names():
@@ -94,7 +105,7 @@ def main(trials: int, device: str = "cuda:0", shard: int = 0, nshards: int = 1) 
             rp = os.path.join(run_dir, "row.json")
             if os.path.exists(rp):
                 row = json.load(open(rp))
-                if row.get("ckpt_id") == pipeline.CKPT_ID:
+                if row.get("ckpt_id") == pipeline.CKPT_ID and row.get("schema", 1) >= ROW_SCHEMA:
                     rows.append(row)
                     continue
             if variant is None:
@@ -104,8 +115,10 @@ def main(trials: int, device: str = "cuda:0", shard: int = 0, nshards: int = 1) 
                 res = track_sequence(model, groups, seq, dino, cfg, g2gt, name=name,
                                      tracking_cfg=variant_config(cfg.tracking, variant), model_points=mp,
                                      motion_prior=prior, verbose=False)
-            sc = score_trial(res, seq, ctx["means_local"], ctx["covs"], ctx["opac"], ctx["tip_local"], mp)
+            sc = score_trial(res, seq, ctx["means_local"], ctx["covs"], ctx["opac"], ctx["tip_local"], mp,
+                             axis_local=ctx["bit_axis_local"])
             row = {"case": c.name, "angle": c.angle, "seed": c.seed, "method": name, "ckpt_id": pipeline.CKPT_ID,
+                   "schema": ROW_SCHEMA,
                    **judge(sc["per_frame"]), "kl_xy": sc["summary"]["kl_xy"]}
             os.makedirs(run_dir, exist_ok=True)
             write_env_json(run_dir)
@@ -129,6 +142,20 @@ def write_summary(df: pd.DataFrame) -> None:
         r, rs = mean_std(g.rot_err_at_N_deg)
         lines.append(f"| {ang:+g}° | {meth} | {k}/{n} | {k / n:.0%} | [{lo:.2f}, {hi:.2f}] | "
                      f"{target_verdict(k, n, TARGET)} | {t:.2f} ± {ts:.2f} | {r:.1f} ± {rs:.1f} |")
+    if "success_rollfree" in df and df["success_rollfree"].notna().any():
+        lines += ["", "**Paper-faithful rule** (deviation logged 2026-11-22, taken from POGS Sec. V-B, not from our "
+                  "results): tip < 3 cm and bit-axis direction (swing) < 5 deg at N, never lost; roll about the bit "
+                  "axis free. Pre-registered rule above stays the primary result.", "",
+                  "| Setting | Method | Recovered (k/n) | 95% CI (Wilson) | vs 80% | Swing at N (deg) | Roll at N (deg) | Roll pre (deg) |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for (ang, meth), g in df.dropna(subset=["success_rollfree"]).groupby(["angle", "method"], sort=False):
+            k, n = int(g.success_rollfree.astype(bool).sum()), len(g)
+            lo, hi = wilson_interval(k, n)
+            w, ws = mean_std(g.swing_at_N_deg)
+            r, rs = mean_std(g.roll_at_N_deg.abs())
+            r0, r0s = mean_std(g.roll_pre_deg.abs())
+            lines.append(f"| {ang:+g}° | {meth} | {k}/{n} | [{lo:.2f}, {hi:.2f}] | {target_verdict(k, n, TARGET)} | "
+                         f"{w:.1f} ± {ws:.1f} | {r:.1f} ± {rs:.1f} | {r0:.1f} ± {r0s:.1f} |")
     lines.append("\nSuccess: tip < 3 cm and rot < 5 deg at 10 frames (2 s) after the perturbation, never lost after it. "
                  "Paper (physical robot, reference only): 48/50 at 15 deg, 40/50 at 30 deg. "
                  "Jaws are not collision-checked against the turning drill.")

@@ -38,7 +38,8 @@ from data.scene_generator.tool_perturbation import (
     generate_tool_capture, generate_tool_sequence, o3_cases,
 )
 from metrics.gaussian import gaussian_covariances, weighted_kl
-from metrics.pose import SUCCESS_POS_CM, SUCCESS_ROT_DEG, adds_success_rate, object_diameter
+from metrics.pose import (SUCCESS_POS_CM, SUCCESS_ROT_DEG, adds_success_rate, object_diameter,
+                          roll_swing_error_deg)
 from metrics.stats import mean_std, wilson_interval
 from model.pogs.checkpoint import write_json
 from model.pogs.evaluate import object_model_points, static_baseline, track_sequence, variant_config
@@ -67,7 +68,19 @@ def _tip_err_cm(P: np.ndarray, G: np.ndarray, tip_local: np.ndarray) -> float:
     return float(np.linalg.norm(a - b) * 100)
 
 
-def score_trial(res, seq, means_local, covs, opac, tip_local, mp) -> Dict:
+def _roll_swing(P, G, axis_local) -> Dict:
+    if axis_local is None:
+        return {}
+    rs = [roll_swing_error_deg(np.asarray(P[f], np.float64), np.asarray(G[f], np.float64), axis_local)
+          for f in range(len(P))]
+    return {"roll_err_deg": [r for r, _ in rs], "swing_err_deg": [w for _, w in rs],
+            "axis_local": [float(x) for x in axis_local]}
+
+
+def score_trial(res, seq, means_local, covs, opac, tip_local, mp, axis_local=None) -> Dict:
+    """Per-frame errors and the trial summary. With ``axis_local`` (the tool axis in the group's local
+    frame) the per-frame record also holds signed roll about that axis and its swing (plan rev. 2, E0),
+    and every record stores the full estimated and ground-truth SE(3) (``pred_T``, ``gt_T``)."""
     phases = [fm["phase"] for fm in seq.meta["frames"]]
     P, G = res.pred_poses[:, 0], res.gt_poses[:, 0]
     F = len(phases)
@@ -88,7 +101,10 @@ def score_trial(res, seq, means_local, covs, opac, tip_local, mp) -> Dict:
     return {
         "per_frame": {"phase": phases, "commanded_deg": [fm["commanded_deg"] for fm in seq.meta["frames"]],
                       "pos_err_cm": pos.tolist(), "rot_err_deg": rot.tolist(), "tip_err_cm": tip.tolist(),
-                      "adds_m": res.adds[:, 0].tolist(), "kl_gt": kl_gt},
+                      "adds_m": res.adds[:, 0].tolist(), "kl_gt": kl_gt,
+                      "pred_T": np.round(np.asarray(P, dtype=np.float64), 7).tolist(),
+                      "gt_T": np.round(np.asarray(G, dtype=np.float64), 7).tolist(),
+                      **_roll_swing(P, G, axis_local)},
         "summary": {
             "recovered": recovered, "final_tip_err_cm": float(tip[-1]), "final_rot_err_deg": float(rot[-1]),
             "max_pos_err_cm": float(np.nanmax(pos)), "x_tip_err_cm": float(tip[fx]), "x_rot_err_deg": float(rot[fx]),
@@ -125,8 +141,10 @@ def setup_tool_context(device: str = "cuda:0") -> Dict:
     scan_drill = next(o for o in build_tool_scene() if o.obj_id == DRILL_ID)
     tip_world = np.asarray(scan_drill.position) + DRILL_TIP_LOCAL      # drill yaw 0 at scan
     tip_local = tip_world - c0.cpu().numpy()
+    cy, sy = np.cos(scan_drill.yaw), np.sin(scan_drill.yaw)
+    bit_axis_local = np.array([cy, sy, 0.0])        # drill-bit axis = object +x (DRILL_TIP_LOCAL lies on it)
     return dict(cfg=cfg, model=model, dino=dino, groups=groups, g2gt=g2gt, mp=mp, means_local=means_local,
-                covs=covs, opac=opac, tip_local=tip_local)
+                covs=covs, opac=opac, tip_local=tip_local, bit_axis_local=bit_axis_local)
 
 
 def main(seeds: List[int], axes: List[str], device: str = "cuda:0") -> pd.DataFrame:

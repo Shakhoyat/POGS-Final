@@ -87,3 +87,6 @@ model/foundation_study/**/clusters.npy
 # pipeline runtime state/logs
 data_results/_pipeline/*.running
 data_results/_pipeline/pid
+
+# Reference papers: local only (index in ref-paper/README.md)
+ref-paper/*.pdf
