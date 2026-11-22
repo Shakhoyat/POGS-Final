@@ -145,3 +145,25 @@ def test_regression_hessian_quadratic_and_smooths_noise():
     rip = lambda d: 0.5 * ((A @ d + b) ** 2).sum() + 1e-4 * torch.sin(4000.0 * d).sum()
     out2 = loss_hessian_regression(rip, 0.02, 0.003, n=24)
     assert np.abs(out2["H"] - Hq).max() / np.abs(Hq).max() < 0.25
+
+
+def test_orbit_modes_unimodal_bimodal_and_flat():
+    from model.pogs.information import orbit_log_density, orbit_modes
+    phi = np.linspace(-np.pi, np.pi, 64, endpoint=False) + np.pi / 64
+    wrap = lambda x: np.angle(np.exp(1j * x))
+    one = (wrap(phi - 0.5) / 0.3) ** 2                          # one basin at 0.5 rad
+    m = orbit_modes(phi, orbit_log_density(one, tau=1.0))
+    assert len(m) == 1 and abs(m[0]["phi"] - 0.5) < 0.1 and m[0]["mass"] > 0.99
+    two = np.minimum((wrap(phi - 0.5) / 0.3) ** 2, (wrap(phi - 0.5 - np.pi) / 0.3) ** 2 + 0.2)
+    m2 = orbit_modes(phi, orbit_log_density(two, tau=1.0))
+    assert len(m2) == 2 and m2[0]["mass"] > m2[1]["mass"] > 0.2   # flip kept, slightly less likely
+    flat = orbit_log_density(np.zeros_like(phi), tau=1.0)
+    assert np.allclose(flat, 0.0)                               # continuous symmetry: uniform belief
+
+
+def test_orbit_density_temperature_sharpens():
+    from model.pogs.information import orbit_log_density
+    from metrics.calibration import circular_nll
+    phi = np.linspace(-np.pi, np.pi, 64, endpoint=False) + np.pi / 64
+    L = 1 - np.cos(phi - 0.2)
+    assert circular_nll(phi, orbit_log_density(L, 0.1), 0.2) < circular_nll(phi, orbit_log_density(L, 1.0), 0.2)

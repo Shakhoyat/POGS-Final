@@ -26,7 +26,7 @@ eigenvalues do not transfer across objects or images (X-ICP, T-RO 2024, Sec. II-
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -200,3 +200,58 @@ def pose_to_part_delta(T: np.ndarray, centroid: np.ndarray) -> torch.Tensor:
     R = torch.as_tensor(np.asarray(T)[:3, :3], dtype=torch.float32)
     t = torch.as_tensor(np.asarray(T)[:3, 3] - np.asarray(centroid), dtype=torch.float32)
     return torch.cat([t, quat_normalize(rotmat_to_quat(R.unsqueeze(0))[0])])
+
+
+# --------------------------------------------------------------------------- #
+# Weak-axis belief (plan rev. 2, M4 / task T5)
+# --------------------------------------------------------------------------- #
+
+def orbit_loss_profile(opt, obs, k: int, axis_local, n: int = 32, use_depth: bool = True,
+                       base: Optional[torch.Tensor] = None) -> Dict[str, np.ndarray]:
+    """Tracker loss along the 1-D orbit T Exp(phi a), phi on a uniform grid over (-pi, pi], for group k
+    and an object-frame axis a (e.g. the weakest rotation eigenvector, or the bit axis). n renders,
+    no gradients. ``base`` defaults to the current estimate."""
+    a = torch.as_tensor(np.asarray(axis_local, dtype=np.float64))
+    a = a / a.norm()
+    b = opt.part_deltas.detach() if base is None else base.detach().to(opt.part_deltas)
+    phis = np.linspace(-np.pi, np.pi, n, endpoint=False) + np.pi / n      # avoids duplicating +/-pi
+    losses = np.full(n, np.nan)
+    with torch.no_grad():
+        for i, ph in enumerate(phis):
+            d = torch.cat([a * float(ph), torch.zeros(3, dtype=torch.float64)])
+            L, _ = opt.get_optim_loss(obs, perturbed_deltas(b, k, d), use_depth=use_depth,
+                                      use_roi=opt.config.use_roi)
+            if L is not None:
+                losses[i] = float(L)
+    return {"phi": phis, "loss": losses}
+
+
+def orbit_log_density(losses: np.ndarray, tau: float) -> np.ndarray:
+    """Unnormalised log density log p(phi) = -(L(phi) - min L) / tau (NaN -> -inf)."""
+    L = np.asarray(losses, dtype=np.float64)
+    ld = -(L - np.nanmin(L)) / tau
+    return np.where(np.isfinite(ld), ld, -np.inf)
+
+
+def orbit_modes(phi: np.ndarray, log_density: np.ndarray, min_rel: float = 0.1) -> List[Dict[str, float]]:
+    """Local maxima of the periodic density with probability mass >= ``min_rel`` x the largest mode's
+    peak density; returns [{phi, mass}] sorted by mass (mass = share of grid mass in the mode's basin)."""
+    ld = np.asarray(log_density, dtype=np.float64)
+    p = np.exp(ld - ld.max())
+    n = p.size
+    peaks = [i for i in range(n) if p[i] >= p[i - 1] and p[i] >= p[(i + 1) % n] and p[i] >= min_rel]
+    if not peaks:
+        return []
+    # basin assignment: steepest ascent on the circular grid
+    owner = np.empty(n, dtype=int)
+    for j in range(n):
+        i = j
+        while True:
+            nb = max((i - 1) % n, (i + 1) % n, i, key=lambda m: p[m])
+            if nb == i:
+                break
+            i = nb
+        owner[j] = i
+    tot = p.sum()
+    out = [{"phi": float(phi[i]), "mass": float(p[owner == i].sum() / tot)} for i in peaks]
+    return sorted(out, key=lambda m: -m["mass"])
