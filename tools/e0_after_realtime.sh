@@ -2,7 +2,8 @@
 # Plan rev. 2, E0: re-run O4 with full SE(3) storage (schema 2) once the latency-sensitive `realtime`
 # pipeline stage has finished (latency stages must run alone; PLAN 3.4). Accuracy-only, so it may share
 # the GPU with the pipeline's later v3 stage. Log: data_results/_pipeline/e0.log
-# 2 shards (2026-11-23): 3 shards filled 12 GB VRAM (11.95 GB) and stalled at 4% GPU utilisation.
+# Shards default 2. The 2026-11-23 stalls were a missing `source tools/cuda_env.sh` in o4_parallel.sh
+# (CPU-bound fallback at 4% GPU), now fixed; shard count was not the cause.
 cd "$(dirname "$0")/.."
 S=data_results/_pipeline
 while [ ! -f $S/realtime.done ] && [ ! -f $S/realtime.failed ]; do sleep 300; done

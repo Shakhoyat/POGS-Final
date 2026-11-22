@@ -2,6 +2,8 @@
 # Run O4 as N shards sharing the GPU (O4 measures accuracy, not latency, so sharing is safe), then aggregate.
 # Resumable: finished cases are skipped via their row.json. Usage: tools/o4_parallel.sh [N_SHARDS]
 cd "$(dirname "$0")/.."
+# gsplat needs the CUDA toolkit env; without it the shards fall back to a CPU-bound path (2026-11-23 stalls)
+source tools/cuda_env.sh >/dev/null 2>&1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 N=${1:-3}; PY=".venv/bin/python -u"
 pids=()
