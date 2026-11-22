@@ -55,6 +55,8 @@ def _method_names():
 
 def aggregate(trials: int) -> pd.DataFrame:
     """Collect every cached row.json (all shards) into summary.csv / summary.md."""
+    from experiments.o3_perturbation import CKPT_DIR
+    pipeline._set_ckpt_id(CKPT_DIR)
     rows = []
     for c in o4_cases(range(trials)):
         for name in _method_names():
