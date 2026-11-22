@@ -75,3 +75,21 @@ def test_fixed_mode_is_the_v2_filter():
     R0 = p.filters[0].R_r.copy()
     p.observe(None, None)                                      # no-op
     assert np.array_equal(p.filters[0].R_r, R0)
+
+
+def test_step_damping_term_small_angle_and_translation():
+    from model.pogs.geometry import so3_exp
+    from model.pogs.tracking import step_damping_term
+    pd0 = torch.tensor([[0.0, 0, 0, 1, 0, 0, 0]])
+    th = 0.05
+    pd = torch.cat([torch.tensor([[0.01, 0.0, 0.0]]), so3_exp(torch.tensor([[0.0, 0.0, th]]))], dim=1)
+    v = float(step_damping_term(pd, pd0, lam_rot=1.0, lam_trans=0.0))
+    assert abs(v - th ** 2) < 1e-4                       # ~ theta^2
+    assert abs(float(step_damping_term(pd, pd0, 0.0, 2.0)) - 2 * 0.01 ** 2) < 1e-9
+    assert float(step_damping_term(pd0, pd0, 5.0, 5.0)) == 0.0
+
+
+def test_damping_defaults_are_release_behaviour():
+    from model.pogs.config import TrackingConfig
+    c = TrackingConfig()
+    assert c.step_damping_rot == 0.0 and c.step_damping_trans == 0.0

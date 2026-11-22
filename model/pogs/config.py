@@ -215,6 +215,12 @@ class TrackingConfig:
     blur_kernel_size: int = 5
     clip_grad: float = 0.0
     """The release defines ``clip_grad = 0.8`` but never applies it. 0 = off."""
+    step_damping_rot: float = 0.0
+    """Not in the release (0 = off, release behaviour). Plan rev. 2 M2 baseline: Tikhonov damping
+    lam_r * theta^2 of each frame's rotation update from its start pose (Opra et al. 2026 / ICG+,
+    isotropic per block). Units: loss per rad^2."""
+    step_damping_trans: float = 0.0
+    """Not in the release (0 = off). Translation counterpart of ``step_damping_rot``; loss per m^2."""
     use_roi: bool = True
     use_mask_loss: bool = False
     mask_loss_mult: float = 0.6

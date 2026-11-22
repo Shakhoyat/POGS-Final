@@ -200,6 +200,16 @@ class TrackStepInfo:
     part_deltas: torch.Tensor
 
 
+def step_damping_term(pd: torch.Tensor, pd0: torch.Tensor, lam_rot: float, lam_trans: float) -> torch.Tensor:
+    """Tikhonov penalty on the update from the frame's start pose ``pd0`` (both (K, 7) [t | q]):
+    lam_trans * |t - t0|^2 + lam_rot * theta^2, with theta^2 ~= 8 (1 - |<q, q0>|) for small angles."""
+    dt = ((pd[:, :3] - pd0[:, :3]) ** 2).sum()
+    q = quat_normalize(pd[:, 3:])
+    q0 = quat_normalize(pd0[:, 3:])
+    th2 = 8.0 * (1.0 - (q * q0).sum(-1).abs()).sum()
+    return lam_trans * dt + lam_rot * th2
+
+
 class RigidGroupOptimizer:
     def __init__(
         self,
@@ -235,6 +245,9 @@ class RigidGroupOptimizer:
         self.part_optimizer = torch.optim.Adam([self.part_deltas], lr=config.pose_lr)
         self.prev_part_deltas = self.part_deltas.data.clone()
         self.is_initialized = False
+        # Optional extra loss on the pose (plan rev. 2 M2: e.g. an information-form prior from a filter);
+        # callable(part_deltas, start_part_deltas) -> scalar tensor. None = release behaviour.
+        self.extra_loss_fn = None
         self.frame: Optional[PosedObservation] = None
 
         # diagnostics: how often the Sec. IV-D depth term had to be rescued or
@@ -649,6 +662,11 @@ class RigidGroupOptimizer:
             )
             if loss is None:
                 break
+            if cfg.step_damping_rot > 0 or cfg.step_damping_trans > 0:
+                loss = loss + step_damping_term(self.part_deltas, self.prev_part_deltas,
+                                                cfg.step_damping_rot, cfg.step_damping_trans)
+            if self.extra_loss_fn is not None:
+                loss = loss + self.extra_loss_fn(self.part_deltas, self.prev_part_deltas)
             loss.backward()
             if cfg.upright_constraint and self.part_deltas.grad is not None:
                 self.part_deltas.grad[:, 4:6] = 0.0
