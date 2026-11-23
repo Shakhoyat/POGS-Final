@@ -81,3 +81,24 @@ the gripper is closest (frame 2, 15.2°), consistent with the shadow effect in B
 Caveats: one splat; synthetic renderer with one fixed lighting; 1-D sweeps about the group centroid (translation
 not re-optimised per roll angle); the tracking-camera rows are near-identical across seeds because frame 0
 is the same scene in every case.
+
+## Step 2 (B2): re-distil features only, geometry frozen (`experiments/b2_redistil.py`, 3000 steps, release LRs)
+Acceptance rule (set before the runs): a backbone passes only if its DINO roll argmin shrinks **both** on held-out
+views and on the tracking camera relative to the v2 control (same loop, release backbone).
+
+| Features | train views mean abs argmin (sd) | held-out mean abs argmin [range] | tracking f0 (gripper + shadow) | no gripper | gripper, no shadows | Verdict |
+|---|---|---|---|---|---|---|
+| release splat (joint training) | 3.1° (3.7) | 3.1° [−5, +6] | −10° | −6° | −2° | reference |
+| v2 control (DINOv2-S/14, feature-only loop) | 2.5° (2.9) | 2.9° [−5, +6] | −9° | −5° | −2° | reproduces release → loop is sound |
+| v2reg (DINOv2-S/14 + 4 registers) | 4.5° (4.9) | 4.6° [−8, +8] | −6° (−6° with 3.7·depth) | −5° | −2° | **fails**: tracking view better, held-out worse |
+| v3s (DINOv3 ViT-S/16, timm) | 10.7° (12.7) | 9.1° [−11, +21] | −12° | −10° | −10° | **fails**: much worse everywhere |
+
+Reading: swapping the backbone does not remove the view-dependent bias. Registers trade a smaller offset at this
+camera for a larger spread across views. DINOv3-S at this resolution and with 64-D PCA (its features needed a
+×8 PCA rescale to match the release feature energy) is far less pose-consistent for this object. The
+illumination component (−2° without shadows vs −6/−10° with them) persists for both DINOv2 variants.
+Caveats: one setting per backbone (ViT-S, PCA-64, 1260/1248 px long side), and one splat. The DINOv3 result could
+depend on the resolution, PCA dimension or layer, which were not tuned, on purpose: tuning them on these sweeps
+would overfit the acceptance test.
+Upsampler (AnyUp, trained on DINOv2-S/14): implemented but not run. Loading it executes third-party hub code,
+which needs the user's approval. Its expected effect is bounded by the grid component (±3°).

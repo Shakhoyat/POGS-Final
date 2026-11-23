@@ -54,7 +54,10 @@ come from the result files named in each section; nothing here is new data.
 | RGB term, weight 1 (E2b) | −1° | worse: roll 14.3° vs 9.4°; −30° +0.28, +30° −0.20 | negative |
 | depth ×30 (E2c) | −6° | pending | running |
 | depth ×100 (E2c) | −3° | pending | queued |
-| features re-distilled: DINOv2 control / DINOv2-reg / DINOv3-S (B2) | pending | only if the sweeps improve | running |
+| features re-distilled, DINOv2 control (B2) | −9° (release −10°) | not run (control) | reproduces release |
+| DINOv2-reg (B2) | −6° | not run: held-out views worse (4.6° vs 2.9°) | rejected |
+| DINOv3 ViT-S/16 (B2) | −12° | not run: held-out 9.1°, up to +21° | rejected |
+| AnyUp upsampler on DINOv2 (B2) | pending | | awaiting approval to run hub code |
 
 ## 6. Recommendations for tool-tracking evaluation (to finalise)
 1. Report the tool-axis rule and the full-rotation rule side by side, and say which DOF a rule leaves free.
