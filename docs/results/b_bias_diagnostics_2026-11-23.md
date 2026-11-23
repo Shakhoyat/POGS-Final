@@ -247,7 +247,7 @@ training views [−9, +13]. **Fails acceptance**, i.e. upsampling makes the bias
 3. **No fix tested keeps the restoring force without the bias.** Backbones (DINOv2-reg, DINOv3-S) and AnyUp fail
    the single-frame acceptance test. On trajectories, against POGS's 9–23/25 under the paper-faithful rule:
    depth ×30 2/1/0/0, depth ×100 0/0/0/0, rendered background 0/0/0/0, per-pose mask 1/0/4/4, frame-start mask
-   1/0/2/2 (of 5), RGB (E2b) worse than POGS. A depth-only control gets 0/0/0/0. Each substitute for the
+   1/0/2/2 (of 5), RGB (E2b) mixed (16/13/20/18: better at −30°, worse at +30° with CI < 0, roll 14° vs 9.4°, so it fails the rule). A depth-only control gets 0/0/0/0. Each substitute for the
    implicit silhouette term breaks a different assumption: occlusion (depth), shading (RGB), restoring force
    (masks), static-scene validity (rendered background).
 4. Per the plan's stop rule, **the analysis note (C) becomes the main result.** Step 3 is not started; its
