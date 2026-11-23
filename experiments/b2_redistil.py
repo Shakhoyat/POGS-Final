@@ -70,7 +70,75 @@ class TimmViTExtractor(DinoExtractor):
         return torch.cat(out, dim=0)
 
 
+ANYUP_DIR = os.path.expanduser("~/third_party_pinned/anyup")              # git clone, read before use
+ANYUP_COMMIT = "351807a9c4287368732cc247f26c7c81c9139af4"
+ANYUP_CKPT = os.path.expanduser("~/third_party_pinned/anyup_weights/anyup_paper.pth")
+ANYUP_SHA256 = "9d035c0f27114a6f32bdd3d8ed93b6cd39dad4b8f8bf94e69fddbfbf022901b2"
+
+
+def _load_anyup(device: str):
+    """AnyUp from a pinned, reviewed clone (no torch.hub fetch); state dict loaded with weights_only=True after
+    checking the commit and the checkpoint's sha256."""
+    import hashlib
+    import subprocess
+    import sys
+    head = subprocess.run(["git", "-C", ANYUP_DIR, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    if head != ANYUP_COMMIT:
+        raise RuntimeError(f"AnyUp clone at {head}, expected pinned {ANYUP_COMMIT}")
+    if hashlib.sha256(open(ANYUP_CKPT, "rb").read()).hexdigest() != ANYUP_SHA256:
+        raise RuntimeError("AnyUp checkpoint checksum mismatch")
+    sys.path.insert(0, ANYUP_DIR)
+    from anyup.model import AnyUp
+    m = AnyUp()
+    m.load_state_dict(torch.load(ANYUP_CKPT, map_location="cpu", weights_only=True))
+    return m.to(device).eval()
+
+
+class AnyUpDinoExtractor(DinoExtractor):
+    """DINOv2 ViT-S/14 features upsampled by AnyUp (checkpoint trained on DINOv2 ViT-S/14) to ``factor`` x the
+    patch grid, guided by the ImageNet-normalised input image."""
+
+    def __init__(self, device: str = "cuda:0", factor: int = 4):
+        super().__init__(device=device, model_type="dinov2_vits14")
+        self.factor = factor
+        self.up = _load_anyup(device)
+        for q in self.up.parameters():
+            q.requires_grad_(False)
+        self.backend = f"torch.hub/dinov2 + anyup@{ANYUP_COMMIT[:7]}"
+
+    @torch.no_grad()
+    def fit_pca(self, images: torch.Tensor, batch: int = 1, max_samples: int = 400_000) -> None:
+        """Same PCA as the release, but sampled view by view (all upsampled views at once would need ~4 GB)."""
+        per = max_samples // images.shape[0] + 1
+        g = torch.Generator(device="cpu").manual_seed(0)
+        picks = []
+        for v in range(images.shape[0]):
+            f = self.raw_feats(images[v:v + 1]).reshape(-1, 384)
+            picks.append(f[torch.randperm(f.shape[0], generator=g)[:per].to(f.device)])
+        flat = torch.cat(picks)
+        self.pca_matrix = torch.pca_lowrank(flat, q=self.pca_dim, niter=20)[2]
+        torch.cuda.empty_cache()
+
+    @torch.no_grad()
+    def raw_feats(self, images: torch.Tensor, batch: int = 1) -> torch.Tensor:
+        lr = super().raw_feats(images, batch=batch) * 10.0           # undo /10 for the upsampler, redo below
+        H, W = images.shape[-2:]
+        h, w = get_img_resolution(H, W, 14, self.max_size)
+        out = []
+        for i in range(images.shape[0]):
+            x = F.interpolate(images[i:i + 1].to(self.device).float(), size=(h, w), mode="bicubic",
+                              align_corners=False, antialias=True)
+            x = (x - self._mean) / self._std
+            f = lr[i:i + 1].permute(0, 3, 1, 2).float()
+            size = (lr.shape[1] * self.factor, lr.shape[2] * self.factor)
+            u = self.up(x, f, output_size=size, q_chunk_size=2048)
+            out.append(u.permute(0, 2, 3, 1).float() / 10.0)
+        return torch.cat(out, dim=0)
+
+
 def make_extractor(kind: str, device: str):
+    if kind == "v2up":
+        return AnyUpDinoExtractor(device=device)
     if kind == "v2":
         return DinoExtractor(device=device, model_type="dinov2_vits14")
     if kind == "v2reg":
@@ -167,7 +235,7 @@ def main(kind: str, steps: int, device: str = "cuda:0") -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=["v2", "v2reg", "v3s"])
+    ap.add_argument("kind", choices=["v2", "v2reg", "v3s", "v2up"])
     ap.add_argument("--steps", type=int, default=3000)
     a = ap.parse_args()
     main(a.kind, a.steps)

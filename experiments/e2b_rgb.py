@@ -38,6 +38,9 @@ VARIANTS = {
     "rgb1": ("POGS + RGB", dict(use_rgb=True), "data_results/e2b_rgb"),
     "depth30": ("POGS (depth x30)", dict(depth_loss_mult=30.0), "data_results/e2c_depth30"),
     "depth100": ("POGS (depth x100)", dict(depth_loss_mult=100.0), "data_results/e2c_depth100"),
+    # control for E2c: is a heavy depth weight a fix, or does it just switch DINO off? (POGS Table III ablation:
+    # tracking without DINO features gave zero consecutive successful resets)
+    "depthonly": ("POGS (depth only, no DINO)", dict(use_dino=False), "data_results/e2c_depthonly"),
 }
 
 
