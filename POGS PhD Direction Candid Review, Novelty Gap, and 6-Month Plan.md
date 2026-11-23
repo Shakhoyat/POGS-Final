@@ -216,6 +216,23 @@ the methodology note (the metric mismatch, the null-model recovery metric, the p
 benchmark paper. (3) Never cut: the pre-registered result, Static and equal-compute baselines, per-frame storage,
 calibration (E4) and one real benchmark.
 
+**Direction decision (2026-11-23, after G0 / E2 / E2b; LEDGER 8.B).** G0 failed, P1 failed, and the floor is a
+*bias* of the DINO feature term (minimum ≈ −10° roll at the true pose), not weak observability. A filter that
+models zero-mean scatter cannot remove a bias, so the method line M1–M4 / E3 is **on hold**, and its freeze tag
+is held. The programme follows **direction B**, in a fixed order with a deadline, and the analysis note (C) is
+written alongside it:
+
+| Step | Test | Outcome that decides |
+|---|---|---|
+| B0 | Is the ground truth right? (sim: renderer transform, 6-DOF RGB/depth sweeps; real: ArUco) | done: GT exact. Bias is real |
+| B1 | Roll sweeps from many viewpoints, DINO / depth / RGB separated; grid shift; scene context; weight ladder | done: the DINO minimum moves with viewpoint (±5°) and with shadows (−6° → −10°); depth unbiased but flat. E2c (depth ×30/×100 on trajectories) running |
+| B2 | Re-distil features only on frozen geometry: DINOv2-reg, DINOv3, one upsampler; accept on the B1 sweeps first | by **2026-11-30** |
+| B3 | Only if B0–B2 fail: 3-D-aware feature fine-tuning (FiT3D-style) | new research question, expensive |
+
+If a step removes the bias, the paper is: *a systematic, view- and illumination-dependent roll bias in
+distilled-DINO tracking, its cause, the fix, and a recovery metric checked against Static.* If none does, the
+analysis note becomes the main result (stop rule 1).
+
 **Resource rules (unchanged from PLAN §3.4).** Accuracy runs may share the GPU (O4 as 3 shards). Latency stages (o5, o6,
 realtime, E6 timing) run alone. Report the hardware with every timing.
 
