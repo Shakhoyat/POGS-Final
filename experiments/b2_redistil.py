@@ -96,9 +96,11 @@ def _load_anyup(device: str):
 
 class AnyUpDinoExtractor(DinoExtractor):
     """DINOv2 ViT-S/14 features upsampled by AnyUp (checkpoint trained on DINOv2 ViT-S/14) to ``factor`` x the
-    patch grid, guided by the ImageNet-normalised input image."""
+    patch grid, guided by the ImageNet-normalised input image. Factor 2, not 4: AnyUp builds its local-window
+    attention mask on the CPU per crop shape (queries x keys booleans), and at 4x on ROI crops that mask alone
+    stalled the sweeps for > 20 min (2026-11-23)."""
 
-    def __init__(self, device: str = "cuda:0", factor: int = 4):
+    def __init__(self, device: str = "cuda:0", factor: int = 2):
         super().__init__(device=device, model_type="dinov2_vits14")
         self.factor = factor
         self.up = _load_anyup(device)

@@ -57,7 +57,16 @@ come from the result files named in each section; nothing here is new data.
 | features re-distilled, DINOv2 control (B2) | −9° (release −10°) | not run (control) | reproduces release |
 | DINOv2-reg (B2) | −6° | not run: held-out views worse (4.6° vs 2.9°) | rejected |
 | DINOv3 ViT-S/16 (B2) | −12° | not run: held-out 9.1°, up to +21° | rejected |
-| AnyUp upsampler on DINOv2 (B2) | pending | | awaiting approval to run hub code |
+| AnyUp upsampler on DINOv2 (B2, pinned 351807a) | pending (rerun at 2×; 4× sweeps stalled on AnyUp's CPU attention mask) | | running |
+| DINO loss inside the drill, mask fixed at the true pose (B1e) | 0° (leaks GT) | not a method | diagnostic |
+| same, mask at a wrong pose (B1f) | follows the mask (no restoring force) | `maskstart` predicted to stick | small check |
+| DINO loss inside the drill re-rendered per pose (`object`) | +2° | pending (`maskobj`) | queued after E2c ×100 |
+
+## 5b. Mechanism (B1e/B1f)
+87% of the ROI is background. There the release loss compares live features with a zero render, which acts as an
+implicit silhouette term. That term supplies the roll restoring force, and the cast shadow and viewpoint bias it
+(−10° at the tracking camera). Inside the drill the features are unbiased at the truth but nearly flat within
+±10°.
 
 ## 6. Recommendations for tool-tracking evaluation (to finalise)
 1. Report the tool-axis rule and the full-rotation rule side by side, and say which DOF a rule leaves free.

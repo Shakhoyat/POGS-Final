@@ -123,3 +123,33 @@ change. A mask re-rendered at each candidate pose leaves a smaller bias of the o
 pixel set changes with pose. Caveat: the fixed mask here sits at the true pose, which leaks ground truth. In
 tracking it must come from the current estimate, so the next test places the mask at wrong poses (B1f) and
 checks whether the minimum returns to 0° or sticks to the mask.
+
+## B1f: mask placed at a wrong pose (`experiments/b_bias.py maskoff`, `data_results/b_bias/maskoff.json`)
+In tracking the mask must come from the current estimate, not from the truth. For the inside-mask DINO loss with
+the mask rendered at roll δ, the argmin over ±30° is:
+
+| View | δ = −10° | −5° | 0° | +5° | +10° | re-mask fixed point from −10° / +10° (6 rounds) |
+|---|---|---|---|---|---|---|
+| tracking cam, gripper + shadow | −10 | −5 | 0 | +4 | +3 | −10 (stuck) / +3 |
+| tracking cam, no gripper | −9 | −5 | 0 | +4 | +4 | −6 / +4 |
+| held-out az 60° | −9 | −4 | 0 | +5 | +9 | −4 / +9 |
+| held-out az 150° | −2 | −4 | 0 | +5 | +9 | −2 / +9 |
+| held-out az 240° | −9 | −5 | 0 | +3 | +3 | −8 / 0 |
+| held-out az 330° | −9 | −5 | 0 | +5 | +10 | −9 / +10 (stuck) |
+
+**A mask taken from a wrong pose holds the estimate where it is.** The argmin follows the mask in most cases,
+and re-masking moves back at most about 1° per round. The inside-drill features are unbiased at the truth but
+give almost no restoring force within ±10°. That force came from the background pixels, where the release loss
+acts as a silhouette-alignment term (zero render vs live features). The same term carries the shadow and
+viewpoint bias.
+
+Consequences:
+1. The B1e result (0° with a fixed true-pose mask) is partly a ground-truth leak and is **not a fix by itself**.
+   `dino_loss_region="object_frame_start"` is predicted to stick at each frame's start pose; this gets a small
+   O4 check only.
+2. `dino_loss_region="object"` (mask re-rendered at each evaluated pose, no ground truth) has a real minimum
+   at +2…+4° (B1e), against −10° for the release. It runs on O4 next (`maskobj`), judged by the E2c pass rule.
+3. Mechanism, as now stated for the note: **distilled-DINO tracking gets its roll restoring force from a
+   silhouette term implicit in the zero-rendered background, and that term is biased by shadows and viewpoint.**
+   A principled fix keeps a silhouette signal that is robust to shading, for example a rendered-vs-live mask
+   term instead of zero-vs-background features. That would be the next experiment if `maskobj` fails.
