@@ -41,6 +41,8 @@ VARIANTS = {
     # control for E2c: is a heavy depth weight a fix, or does it just switch DINO off? (POGS Table III ablation:
     # tracking without DINO features gave zero consecutive successful resets)
     # shadow step (B1e): DINO term restricted to the object's rendered outline
+    # B1g: background pixels compared with the rendered static scene instead of zero
+    "bgdino": ("POGS (DINO vs rendered background)", dict(dino_background="rendered"), "data_results/e2d_bgdino"),
     "maskobj": ("POGS (DINO in object mask)", dict(dino_loss_region="object"), "data_results/e2d_maskobj"),
     "maskstart": ("POGS (DINO in frame-start mask)", dict(dino_loss_region="object_frame_start"),
                   "data_results/e2d_maskstart"),

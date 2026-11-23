@@ -57,10 +57,11 @@ come from the result files named in each section; nothing here is new data.
 | features re-distilled, DINOv2 control (B2) | −9° (release −10°) | not run (control) | reproduces release |
 | DINOv2-reg (B2) | −6° | not run: held-out views worse (4.6° vs 2.9°) | rejected |
 | DINOv3 ViT-S/16 (B2) | −12° | not run: held-out 9.1°, up to +21° | rejected |
-| AnyUp upsampler on DINOv2 (B2, pinned 351807a) | pending (rerun at 2×; 4× sweeps stalled on AnyUp's CPU attention mask) | | running |
+| AnyUp upsampler on DINOv2 (B2, pinned 351807a) | deferred: distilled at 2×, sweeps thrash the GPU next to two tracking shards; to run when the GPU is free | | deferred |
 | DINO loss inside the drill, mask fixed at the true pose (B1e) | 0° (leaks GT) | not a method | diagnostic |
 | same, mask at a wrong pose (B1f) | follows the mask (no restoring force) | `maskstart` predicted to stick | small check |
-| DINO loss inside the drill re-rendered per pose (`object`) | +2° | pending (`maskobj`) | queued after E2c ×100 |
+| DINO loss inside the drill re-rendered per pose (`object`) | +2° | pending (`maskobj`) | queued |
+| DINO vs rendered background (`dino_background="rendered"`, B1g) | +2° (held-out mean abs 1.3°; shadow-insensitive) | pending (`bgdino`; 1-case smoke: roll pre 3.6° but recovery failed) | queued first after E2c ×100 |
 
 ## 5b. Mechanism (B1e/B1f)
 87% of the ROI is background. There the release loss compares live features with a zero render, which acts as an

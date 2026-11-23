@@ -153,3 +153,24 @@ Consequences:
    silhouette term implicit in the zero-rendered background, and that term is biased by shadows and viewpoint.**
    A principled fix keeps a silhouette signal that is robust to shading, for example a rendered-vs-live mask
    term instead of zero-vs-background features. That would be the next experiment if `maskobj` fails.
+
+## B1g: compare background pixels with the rendered static scene, not with zero (`experiments/b_bias.py bgrender`)
+Whole-ROI DINO term with the full splat rendered (static background at its scanned pose, drill at the evaluated
+pose). No mask, so no ground-truth leak and nothing for the estimate to stick to. Argmin over ±30°:
+
+| Condition | release (background = 0) | background rendered |
+|---|---|---|
+| tracking cam, gripper + shadow (= real frame 0) | −10° | **+2°** |
+| tracking cam, gripper, no shadows | −2° | +4° |
+| tracking cam, no gripper | −6° | +3° |
+| tracking cam, no gripper, no shadows | −6° | +4° |
+| held-out ring (12 az): mean abs argmin / signed mean | 3.7° / +0.5° | **1.3° / +1.0°** |
+
+The shadow no longer pushes the minimum: +2° with it, +4° without. The view-dependent ±5° pattern collapses to
+≤ 4°. A small positive offset (+2…+4°) remains at the tracking camera, about the same as the per-pose mask. The
+loss is shallower (range over ±30° 0.016 vs 0.027), so the restoring force must be checked on trajectories.
+Implemented as `TrackingConfig.dino_background` (`"zero"` = release default, `"rendered"`; one extra render per
+iteration); suite 57 passed, 1 skipped. One-case smoke (`grasp_+15_s0`): roll before the perturbation −8.6° → +3.6°,
+but post-perturbation recovery failed (tip 9.6 cm, swing 14°; POGS passed this case under the paper's rule). That
+is n = 1, so it is not evidence either way. The full O4 run (`bgdino`) is queued after E2c ×100, then the
+depth-only control and `maskobj`.

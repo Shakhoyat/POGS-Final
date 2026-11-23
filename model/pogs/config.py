@@ -228,6 +228,13 @@ class TrackingConfig:
     = inside the object rendered at the pose at the start of each frame's ``step()`` (fixed during its iterations;
     initialisation falls back to ``"object"``). Direction B, `docs/results/b_bias_diagnostics_2026-11-23.md`
     B1e: 87% of the drill ROI is background and carries the roll bias. Applies with ``use_roi`` only."""
+    dino_background: str = "zero"
+    """Not in the release. What the DINO term compares background ROI pixels with: ``"zero"`` = the object-only
+    render (release: background features are 0, so the term acts as an implicit silhouette term), ``"rendered"``
+    = the whole scene splat rendered in the ROI (static background at its scanned pose, tracked objects at the
+    evaluated pose). One extra render per iteration. Depth and RGB terms unchanged. Direction B,
+    `docs/results/b_bias_diagnostics_2026-11-23.md` B1g: removes the shadow-driven roll bias (−10° → +2°).
+    Applies with ``use_roi`` only."""
     use_roi: bool = True
     use_mask_loss: bool = False
     mask_loss_mult: float = 0.6

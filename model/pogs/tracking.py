@@ -316,10 +316,13 @@ class RigidGroupOptimizer:
         part_deltas: torch.Tensor,
         obj_id: Optional[int],
         want_dino: bool,
+        all_gaussians: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """``model.get_outputs(camera, tracking=True, obj_id=...)`` with the
         proposed pose applied differentiably."""
-        if obj_id is not None:
+        if all_gaussians:                                   # whole scene (TrackingConfig.dino_background)
+            sel = None
+        elif obj_id is not None:
             sel = self._idx_obj[obj_id]
         elif not self.config.render_untracked:
             # the release keeps only the selected objects' Gaussians (keep_inds)
@@ -493,7 +496,13 @@ class RigidGroupOptimizer:
                 parts["rendered_rgb"].append(out["rgb"])
                 if use_dino:
                     real_d = rf.dino_feats.to(self.device)
-                    rend_d = L.gaussian_blur2d(out["dino"], cfg.blur_kernel_size)
+                    if cfg.dino_background == "rendered":       # not in the release (default "zero")
+                        full = self._render(rf.camera, part_deltas, i, True, all_gaussians=True)
+                        rend_d = L.gaussian_blur2d(full["dino"], cfg.blur_kernel_size)
+                    elif cfg.dino_background == "zero":
+                        rend_d = L.gaussian_blur2d(out["dino"], cfg.blur_kernel_size)
+                    else:
+                        raise ValueError(f"unknown dino_background {cfg.dino_background!r}")
                     region = self._dino_region(i, out)
                     if region is not None:                    # not in the release (default "roi")
                         real_d, rend_d = real_d[region], rend_d[region]

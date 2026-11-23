@@ -119,3 +119,8 @@ def test_dino_loss_region_default_is_release_and_masks_apply():
         raise AssertionError("unknown mode must fail")
     except ValueError:
         pass
+
+
+def test_dino_background_default_is_release():
+    from model.pogs.config import TrackingConfig
+    assert TrackingConfig().dino_background == "zero"
