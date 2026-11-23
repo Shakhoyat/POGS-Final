@@ -356,6 +356,66 @@ def masks(device="cuda:0", ctx=None, out: str = OUT) -> None:
                                                  "rows": rows})
 
 
+def bgrender(device="cuda:0", ctx=None, out: str = OUT) -> None:
+    """B1g: keep the silhouette signal but compare background pixels with the RENDERED static scene (table, other
+    objects; `render_untracked`) instead of with zero. Whole-ROI DINO term, same conditions as B1e, global argmin
+    over ±30° (no mask, so no ground-truth leak and no stickiness)."""
+    import dataclasses
+    import math
+    from model.pogs import losses as LL
+    from data.scene_generator.pick_place_benchmark import GRIPPER_ID, BenchmarkConfig
+    from data.scene_generator.pick_place_benchmark import tracking_camera as bench_cam
+    from data.scene_generator.photoreal_scene import make_robot_gripper
+    from data.scene_generator.tool_perturbation import (APPROACH_FRAMES, DRILL_ID, GRASP_APPROACH_H,
+                                                        GRASP_PIVOT_LOCAL, _smooth, _translate)
+    from model.pogs.geometry import PinholeCamera, look_at
+    os.makedirs(out, exist_ok=True)
+    ctx = ctx or setup_tool_context(device)
+    tcfg = dataclasses.replace(variant_config(ctx["cfg"].tracking, "POGS"), render_untracked=True)
+    roll = _roll6(ctx)
+    bcfg = BenchmarkConfig()
+    objects = build_tool_scene()
+    drill = next(o for o in objects if o.obj_id == DRILL_ID)
+    c = np.asarray(drill.position) + GRASP_PIVOT_LOCAL
+    g = make_robot_gripper(scale=1.0)
+    g.position, g.yaw, g.obj_id, g.movable = (c[0], c[1], drill.position[2] + 0.138), drill.yaw + math.pi / 2, \
+        GRIPPER_ID, True
+    G0 = _translate([0, 0, GRASP_APPROACH_H * (1 - _smooth(1 / APPROACH_FRAMES))])
+    track = bench_cam(bcfg, device)
+    conds = [("track, gripper (frame 0)", objects + [g], {GRIPPER_ID: G0}, track, True),
+             ("track, gripper, no shadows", objects + [g], {GRIPPER_ID: G0}, track, False),
+             ("track, no gripper", objects, {}, track, True),
+             ("track, no gripper, no shadows", objects, {}, track, False)]
+    tgt = np.asarray(drill.position) + np.array([0.0, 0.0, 0.07])
+    for az in range(0, 360, 30):
+        a, e = math.radians(az), math.radians(30.0)
+        eye = tgt + 0.87 * np.array([math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e)])
+        conds.append((f"heldout r0.87 e30 az{az:03d}", objects, {}, PinholeCamera(
+            torch.from_numpy(look_at(eye, tgt)).float().to(device), bcfg.track_fx, bcfg.track_fx,
+            bcfg.track_width / 2.0, bcfg.track_height / 2.0, bcfg.track_width, bcfg.track_height), True))
+    rows = []
+    for label, objs, tr, cam, shadows in conds:
+        rgb, depth = _render(objs, cam, tr, shadows, device)
+        opt = _optimizer(ctx, tcfg)
+        obs = _obs(rgb, depth, tracking_camera(cam, tcfg, device), ctx, tcfg, opt)
+        rf = obs.roi_frames[0]
+        real = rf.dino_feats.to(device)
+        base = opt.part_deltas.detach().clone()
+        v_obj, v_bg = [], []
+        with torch.no_grad():
+            for gd in ROLL_GRID:
+                pd = perturbed_deltas(base, 0, torch.as_tensor(roll * np.radians(gd), dtype=torch.float64))
+                for sel, acc in ((0, v_obj), (None, v_bg)):
+                    o = opt._render(rf.camera, pd, sel, True)
+                    acc.append(float((real - LL.gaussian_blur2d(o["dino"], opt.config.blur_kernel_size))
+                                     .norm(dim=-1).nanmean()))
+        am = {"object only (release)": _argmin(ROLL_GRID, v_obj),
+              "object + rendered background": _argmin(ROLL_GRID, v_bg)}
+        rows.append({"view": label, "loss_obj": v_obj, "loss_bg": v_bg, "argmin": am})
+        print(f"[b1g] {label}: " + ", ".join(f"{k}: {v:+.0f}" for k, v in am.items()), flush=True)
+    write_json(os.path.join(out, "bgrender.json"), {"rows": rows, "grid_deg": ROLL_GRID.tolist()})
+
+
 def maskoff(device="cuda:0", ctx=None, out: str = OUT) -> None:
     """B1f: mask from a WRONG pose (as in tracking, where it comes from the current estimate). For a mask rendered
     at roll delta, where is the argmin of the inside-mask DINO loss? And the fixed point of re-masking at the last
@@ -542,6 +602,6 @@ def summarise(out: str = OUT, title: str = "Direction B diagnostics (B0 ground t
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["gt", "views", "grid", "context", "masks", "maskoff", "summarise"])
+    ap.add_argument("step", choices=["gt", "views", "grid", "context", "masks", "maskoff", "bgrender", "summarise"])
     a = ap.parse_args()
-    {"gt": gt_check, "views": views, "grid": grid_test, "context": context, "masks": masks, "maskoff": maskoff, "summarise": summarise}[a.step]()
+    {"gt": gt_check, "views": views, "grid": grid_test, "context": context, "masks": masks, "maskoff": maskoff, "bgrender": bgrender, "summarise": summarise}[a.step]()
