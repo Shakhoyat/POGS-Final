@@ -150,9 +150,9 @@ def gt_check(device="cuda:0", n_cases: int = 8) -> None:
 # B1
 # --------------------------------------------------------------------------- #
 
-def views(device="cuda:0") -> None:
-    os.makedirs(OUT, exist_ok=True)
-    ctx = setup_tool_context(device)
+def views(device="cuda:0", ctx=None, out: str = OUT) -> None:
+    os.makedirs(out, exist_ok=True)
+    ctx = ctx or setup_tool_context(device)
     tcfg = variant_config(ctx["cfg"].tracking, "POGS")
     cap = load_capture(TOOL_DATASET_DIR, device=device, objects=build_tool_scene())
     roll = _roll6(ctx)
@@ -179,7 +179,7 @@ def views(device="cuda:0") -> None:
         seq = load_sequence(TOOL_DATASET_DIR, c.name)
         fr = seq.frames[0]
         one(f"track_{c.name}_f0", fr.rgb.to(device), fr.depth.to(device), tracking_camera(seq.camera, tcfg, device))
-    write_json(os.path.join(OUT, "views.json"), {"roll_grid_deg": ROLL_GRID.tolist(), "rows": rows})
+    write_json(os.path.join(out, "views.json"), {"roll_grid_deg": ROLL_GRID.tolist(), "rows": rows})
 
 
 def grid_test(device="cuda:0", case: str = "grasp_+15_s0") -> None:
@@ -216,7 +216,7 @@ def _render(objs, cam, transforms, shadows: bool, device):
     return out["rgb"].float(), out["depth"].float()
 
 
-def context(device="cuda:0") -> None:
+def context(device="cuda:0", ctx=None, out: str = OUT) -> None:
     """B1d: separate 'novel viewpoint' from 'gripper in the scene' for the tracking camera. Clean re-renders
     (no depth noise) of the scanned scene: tracking camera with / without the frame-0 gripper and with / without
     shadows, and held-out viewpoints (never distilled on) looking at the drill, no gripper."""
@@ -228,8 +228,8 @@ def context(device="cuda:0") -> None:
                                                         GRASP_PIVOT_LOCAL, _smooth, _translate)
     from model.pogs.geometry import PinholeCamera, look_at
 
-    os.makedirs(OUT, exist_ok=True)
-    ctx = setup_tool_context(device)
+    os.makedirs(out, exist_ok=True)
+    ctx = ctx or setup_tool_context(device)
     tcfg = variant_config(ctx["cfg"].tracking, "POGS")
     roll = _roll6(ctx)
     bcfg = BenchmarkConfig()
@@ -273,7 +273,7 @@ def context(device="cuda:0") -> None:
             cam = PinholeCamera(c2w, bcfg.track_fx, bcfg.track_fx, bcfg.track_width / 2.0, bcfg.track_height / 2.0,
                                 bcfg.track_width, bcfg.track_height)
             one(f"heldout r{radius:.2f} e{elev:.0f} az{az:03d}", objects, {}, cam, True)
-    write_json(os.path.join(OUT, "context.json"), {"roll_grid_deg": ROLL_GRID.tolist(), "rows": rows})
+    write_json(os.path.join(out, "context.json"), {"roll_grid_deg": ROLL_GRID.tolist(), "rows": rows})
 
 
 # --------------------------------------------------------------------------- #
@@ -304,11 +304,11 @@ def _weights_table(rows, grid) -> List[str]:
     return L
 
 
-def summarise() -> None:
-    L = ["# Direction B diagnostics (B0 ground truth, B1 viewpoint / grid / weights)", "",
+def summarise(out: str = OUT, title: str = "Direction B diagnostics (B0 ground truth, B1 viewpoint / grid / weights)") -> None:
+    L = [f"# {title}", "",
          "Evaluation only. Single splat `tool_table`. Argmins in degrees of roll about the bit axis "
          "(median [min, max] over views).", ""]
-    p = os.path.join(OUT, "gt.json")
+    p = os.path.join(out, "gt.json")
     if os.path.exists(p):
         g = json.load(open(p))
         md = g["metadata"]
@@ -324,7 +324,7 @@ def summarise() -> None:
                 cells.append(f"{np.median(v):+.1f} [{np.min(v):+.1f}, {np.max(v):+.1f}]")
             L.append(f"| {dof} | " + " | ".join(cells) + " |")
         L.append("")
-    p = os.path.join(OUT, "views.json")
+    p = os.path.join(out, "views.json")
     if os.path.exists(p):
         v = json.load(open(p))
         grid = np.asarray(v["roll_grid_deg"])
@@ -344,7 +344,7 @@ def summarise() -> None:
               "## B1c: argmin of the combined loss vs term weight", ""]
         L += _weights_table([("training views", tr), ("tracking camera", tk)], grid)
         L.append("")
-    p = os.path.join(OUT, "grid.json")
+    p = os.path.join(out, "grid.json")
     if os.path.exists(p):
         g = json.load(open(p))
         L += [f"## B1b: patch-grid shift ({g['case']}, frame 0; DINO patch ≈ 10 px at this ROI scale)", "",
@@ -353,7 +353,7 @@ def summarise() -> None:
             L.append(f"| {r['shift_px'][0]:+d}, {r['shift_px'][1]:+d} | {r['argmin']['dino']:+.0f} | "
                      f"{r['argmin']['depth']:+.0f} | {r['argmin']['rgb']:+.0f} |")
         L.append("")
-    p = os.path.join(OUT, "context.json")
+    p = os.path.join(out, "context.json")
     if os.path.exists(p):
         g = json.load(open(p))
         L += ["## B1d: gripper / shadow context and held-out viewpoints (clean re-renders)", "",
@@ -377,7 +377,7 @@ def summarise() -> None:
             L += ["", "Per held-out view (DINO argmin): " +
                   ", ".join(f"{r['view'].replace('heldout ', '')}:{r['argmin']['dino']:+.0f}" for r in ho)]
         L.append("")
-    open(os.path.join(OUT, "summary.md"), "w").write("\n".join(L) + "\n")
+    open(os.path.join(out, "summary.md"), "w").write("\n".join(L) + "\n")
     print("\n".join(L))
 
 
