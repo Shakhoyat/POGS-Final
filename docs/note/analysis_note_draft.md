@@ -1,4 +1,4 @@
-# Analysis note (draft, direction C, written alongside B): what the POGS in-grasp recovery number measures
+# Analysis note (MAIN RESULT since 2026-11-23: direction B found the cause but no fix; draft, direction C): what the POGS in-grasp recovery number measures
 
 Status: living draft, 2026-11-23. Simulation only. One splat (≥ 3 splats before submission, T7). The numbers
 come from the result files named in each section; nothing here is new data.
@@ -57,10 +57,11 @@ come from the result files named in each section; nothing here is new data.
 | features re-distilled, DINOv2 control (B2) | −9° (release −10°) | not run (control) | reproduces release |
 | DINOv2-reg (B2) | −6° | not run: held-out views worse (4.6° vs 2.9°) | rejected |
 | DINOv3 ViT-S/16 (B2) | −12° | not run: held-out 9.1°, up to +21° | rejected |
-| AnyUp upsampler on DINOv2 (B2, pinned 351807a) | deferred: distilled at 2×, sweeps thrash the GPU next to two tracking shards; to run when the GPU is free | | deferred |
+| AnyUp upsampler on DINOv2 (B2, pinned 351807a, 2×) | −15° (control −9°); held-out 4.7° vs 2.9° | not run: fails acceptance | rejected |
 | DINO loss inside the drill, mask fixed at the true pose (B1e) | 0° (leaks GT) | not a method | diagnostic |
-| same, mask at a wrong pose (B1f) | follows the mask (no restoring force) | `maskstart` predicted to stick | small check |
-| DINO loss inside the drill re-rendered per pose (`object`) | +2° | pending (`maskobj`) | queued |
+| same, mask at a wrong pose (B1f) | follows the mask (no restoring force) | see frame-start row | diagnostic |
+| DINO loss inside the drill re-rendered per pose (`object`) | +2° (clean frames) | fails: 1/0/4/4 (POGS 9/12/16/23); approach roll unchanged, loses the drill in the lift (swing 20°, tip 10 cm) | negative |
+| frame-start mask (`object_frame_start`, 5 seeds) | follows the mask (B1f) | fails: 1/0/2/2 of 5 (POGS 1/2/3/5); loses the drill in the lift | negative |
 | DINO vs rendered background (`dino_background="rendered"`, B1g) | +2° (held-out mean abs 1.3°; shadow-insensitive) | fails: 0/25 everywhere; roll fixed on the table (frame 2: 0.6° vs 15.1°) but translation +1.5 cm from frame 0 and roll 13–18° in the lift: the static background is stale once the drill moves | negative |
 
 Depth-only control (DINO off): 0/25 in every setting, both rules (roll pre 10.8°, swing 25°). DINO is worth 9–23

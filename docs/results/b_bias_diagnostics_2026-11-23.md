@@ -221,3 +221,34 @@ ablation: without DINO, no resets succeed.
 What DINO contributes under the paper-faithful rule: 9–23 of 25 recoveries per setting. Depth ×100 (0/25) and
 the rendered background (0/25) match the depth-only control; depth ×30 (2/1/0/0) is barely above it. So
 **none of the fixes tested so far keeps what the DINO term contributes while removing its bias.**
+
+## E2d-2: masked DINO loss on trajectories; AnyUp sweeps
+| Variant | pre-registered (−30/−15/+15/+30°) | paper-faithful | abs roll before | verdict |
+|---|---|---|---|---|
+| Static | 0/0/0/0 of 25 | 0/0/0/0 | – | – |
+| POGS | 3/7/1/6 | 9/12/16/23 | 9.3–9.5° | reference |
+| `maskobj` (`dino_loss_region="object"`, 100 cases) | 1/0/0/0 | 1/0/4/4 (paired −0.32…−0.76, all CIs < 0) | 23.7–24.2° | **fails** |
+| `maskstart` (`"object_frame_start"`, 5 seeds = 20 cases; POGS on the same cases 0/1/0/1 and 1/2/3/5) | 0/0/0/0 | 1/0/2/2 | – | **fails** (small check) |
+
+Phases (median, variant vs POGS): approach roll 8.7 / 11.0 / 16.5 / 16.3° (frames 0–3) vs 7.0 / 10.3 / 15.1 / 12.4°.
+So on real frames, with depth noise, the depth term and the tracker's own iterations, the per-pose mask does not
+remove the bias that clean single frames suggested (B1e: +2°). During the lift both mask variants lose the
+drill: maskobj frame 9 swing 20.3° vs 7.1°, tip 10.5 vs 2.0 cm; maskstart 25.4°, 12.8 cm. This matches B1f:
+without the background silhouette term there is no force that follows the motion.
+AnyUp 2× (pinned 351807a): tracking camera −15° (v2 control −9°), held-out mean abs argmin 4.7° (control 2.9°),
+training views [−9, +13]. **Fails acceptance**, i.e. upsampling makes the bias larger, not smaller.
+
+## Conclusion of direction B, steps 0–2 plus the shadow step (2026-11-23; deadline 2026-11-30 met early)
+1. **The bias is real, and it is not in the drill's features.** Ground truth is exact (B0). Inside the drill's
+   outline, DINO features have their minimum at the true pose in every view and lighting (B1e).
+2. **It lives in the background, through an implicit silhouette term.** 87% of the ROI is background, compared
+   with a zero render. That term supplies the restoring force (B1f) and is what viewpoint (±5°) and the
+   gripper's shadow (−6° → −10°) bias.
+3. **No fix tested keeps the restoring force without the bias.** Backbones (DINOv2-reg, DINOv3-S) and AnyUp fail
+   the single-frame acceptance test. On trajectories, against POGS's 9–23/25 under the paper-faithful rule:
+   depth ×30 2/1/0/0, depth ×100 0/0/0/0, rendered background 0/0/0/0, per-pose mask 1/0/4/4, frame-start mask
+   1/0/2/2 (of 5), RGB (E2b) worse than POGS. A depth-only control gets 0/0/0/0. Each substitute for the
+   implicit silhouette term breaks a different assumption: occlusion (depth), shading (RGB), restoring force
+   (masks), static-scene validity (rendered background).
+4. Per the plan's stop rule, **the analysis note (C) becomes the main result.** Step 3 is not started; its
+   decision is in `docs/note/step3_decision_draft.md`.
