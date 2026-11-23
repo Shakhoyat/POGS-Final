@@ -61,7 +61,7 @@ come from the result files named in each section; nothing here is new data.
 | DINO loss inside the drill, mask fixed at the true pose (B1e) | 0° (leaks GT) | not a method | diagnostic |
 | same, mask at a wrong pose (B1f) | follows the mask (no restoring force) | `maskstart` predicted to stick | small check |
 | DINO loss inside the drill re-rendered per pose (`object`) | +2° | pending (`maskobj`) | queued |
-| DINO vs rendered background (`dino_background="rendered"`, B1g) | +2° (held-out mean abs 1.3°; shadow-insensitive) | pending (`bgdino`; 1-case smoke: roll pre 3.6° but recovery failed) | queued first after E2c ×100 |
+| DINO vs rendered background (`dino_background="rendered"`, B1g) | +2° (held-out mean abs 1.3°; shadow-insensitive) | fails: 0/25 everywhere; roll fixed on the table (frame 2: 0.6° vs 15.1°) but translation +1.5 cm from frame 0 and roll 13–18° in the lift: the static background is stale once the drill moves | negative |
 
 ## 5b. Mechanism (B1e/B1f)
 87% of the ROI is background. There the release loss compares live features with a zero render, which acts as an

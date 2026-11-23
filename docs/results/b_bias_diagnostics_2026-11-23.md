@@ -185,3 +185,30 @@ Abs roll before the perturbation: POGS 9.3–9.5°, ×30 4.0–4.3°, ×100 5.1�
 ≈ 29° (×30) and 32° (×100), against 3.3° for POGS; it starts at frame 2, when the gripper reaches the drill.
 **Both weights fail the pass rule** (paired paper-faithful differences −0.28…−0.92, all CIs < 0). A heavier depth
 term does not fix the bias; it trades it for an occlusion failure.
+
+## E2d-1: rendered background on trajectories (`bgdino`, O4 seeds 0–24, `data_results/e2d_bgdino/summary.md`)
+**Fails the pass rule.** Pre-registered 0/0/0/0 of 25 (POGS 3/7/1/6); paper-faithful 0/0/0/0 (POGS 9/12/16/23);
+Static 0 everywhere; paired paper-faithful differences −0.36…−0.92, all CIs < 0. Abs roll before the perturbation
+7.3–7.5° (POGS 9.3–9.5°).
+
+Median per-frame error, bgdino vs POGS:
+
+| Frames (phase) | roll | swing | tip | position |
+|---|---|---|---|---|
+| 0–2 (approach, drill on the table) | **2.8 / 3.8 / 0.6° vs 7.0 / 10.3 / 15.1°** | 4.2–8.2° vs 1.8–3.2° | 3.0–3.9 vs 0.7–1.5 cm | 1.9–2.5 vs 0.4–1.2 cm |
+| 4–6 (lift) | 13.4–17.9° vs 5.3–7.0° | 5.8–7.5° vs 2.5–6.6° | 4.2–5.9 vs 1.5–1.9 cm | 3.5–4.0 vs 1.3–1.6 cm |
+| 10–12 (rest, held) | 7.0–7.6° vs 9.4–12.1° | 4.8–5.9° vs 3.0–4.7° | 6.6–7.4 vs 0.9–1.0 cm | 5.9–6.4 vs 1.3–1.5 cm |
+| 13–19 (after the perturbation) | 5.7–6.6° vs 7.0–10.1° | 11.7–21.1° vs 3.3–17.1° | 8.5–10.6 vs 2.2–6.0 cm | 6.5–6.6 vs 1.6–2.0 cm |
+
+Reading: **the roll bias is removed while the drill sits where it was scanned** (frame 2: 0.6° vs 15.1°), as B1g
+predicted. But translation is worse from frame 0, and roll and position degrade once the drill leaves its
+scanned place. A static background model is stale after the object moves: the table under the drill was never
+observed, and the drill's own shadow is baked into the table. The rendered background then pulls the estimate.
+A ghost check rules out drill fragments left in the background: 537 opaque non-group Gaussians lie inside the
+drill's box, but at z ≈ 0.05 m, i.e. the table surface around its base. The 1.9 cm translation error at frame 0,
+when nothing is stale yet, is not explained; candidate: the live gripper, absent from the splat, attracts the
+drill when the background is rendered.
+
+**Pattern across all four fixes:** each simple substitute for the implicit silhouette term breaks a different
+assumption. Heavier depth fails under gripper occlusion. RGB fails under shading change (E2b). An inside-object
+mask loses the restoring force (B1f). A rendered background fails once the object leaves its scanned place.
