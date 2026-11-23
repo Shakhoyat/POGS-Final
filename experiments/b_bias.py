@@ -277,6 +277,86 @@ def context(device="cuda:0", ctx=None, out: str = OUT) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# B1e: is the bias carried by the pixels outside the drill (table + shadow)?
+# --------------------------------------------------------------------------- #
+
+MASK_VARIANTS = ("full ROI (release)", "inside rendered drill, per pose", "inside drill at base pose (fixed)")
+
+
+def _dino_masked(opt, obs, pd, base_mask):
+    """DINO term of the ROI exactly as `get_optim_loss` builds it (blurred render vs live features), averaged
+    over (0) every ROI pixel, (1) pixels inside the drill rendered at this pose (alpha >= dino_alpha_thresh),
+    (2) pixels inside the drill rendered at the base pose."""
+    from model.pogs import losses as LL
+    rf = obs.roi_frames[0]
+    out = opt._render(rf.camera, pd, 0, True)
+    rend = LL.gaussian_blur2d(out["dino"], opt.config.blur_kernel_size)
+    real = rf.dino_feats.to(rend.device)
+    err = (real - rend).norm(dim=-1)
+    m_now = out["accumulation"].squeeze(-1) >= opt.config.dino_alpha_thresh
+    return [float(err.nanmean()), float(err[m_now].nanmean()), float(err[base_mask].nanmean())], m_now
+
+
+def masks(device="cuda:0", ctx=None, out: str = OUT) -> None:
+    import math
+    from data.scene_generator.pick_place_benchmark import GRIPPER_ID, BenchmarkConfig
+    from data.scene_generator.pick_place_benchmark import tracking_camera as bench_cam
+    from data.scene_generator.photoreal_scene import make_robot_gripper
+    from data.scene_generator.tool_perturbation import (APPROACH_FRAMES, DRILL_ID, GRASP_APPROACH_H,
+                                                        GRASP_PIVOT_LOCAL, _smooth, _translate)
+    from model.pogs.geometry import PinholeCamera, look_at
+    os.makedirs(out, exist_ok=True)
+    ctx = ctx or setup_tool_context(device)
+    tcfg = variant_config(ctx["cfg"].tracking, "POGS")
+    roll = _roll6(ctx)
+    bcfg = BenchmarkConfig()
+    objects = build_tool_scene()
+    drill = next(o for o in objects if o.obj_id == DRILL_ID)
+    c = np.asarray(drill.position) + GRASP_PIVOT_LOCAL
+    g = make_robot_gripper(scale=1.0)
+    g.position, g.yaw, g.obj_id, g.movable = (c[0], c[1], drill.position[2] + 0.138), drill.yaw + math.pi / 2, \
+        GRIPPER_ID, True
+    G0 = _translate([0, 0, GRASP_APPROACH_H * (1 - _smooth(1 / APPROACH_FRAMES))])
+    track = bench_cam(bcfg, device)
+    conds = [("track, gripper (frame 0)", objects + [g], {GRIPPER_ID: G0}, track, True),
+             ("track, gripper, no shadows", objects + [g], {GRIPPER_ID: G0}, track, False),
+             ("track, no gripper", objects, {}, track, True),
+             ("track, no gripper, no shadows", objects, {}, track, False)]
+    tgt = np.asarray(drill.position) + np.array([0.0, 0.0, 0.07])
+    for az in range(0, 360, 30):
+        a, e = math.radians(az), math.radians(30.0)
+        eye = tgt + 0.87 * np.array([math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e)])
+        cam = PinholeCamera(torch.from_numpy(look_at(eye, tgt)).float().to(device), bcfg.track_fx, bcfg.track_fx,
+                            bcfg.track_width / 2.0, bcfg.track_height / 2.0, bcfg.track_width, bcfg.track_height)
+        conds.append((f"heldout r0.87 e30 az{az:03d}", objects, {}, cam, True))
+    rows = []
+    for label, objs, tr, cam, shadows in conds:
+        rgb, depth = _render(objs, cam, tr, shadows, device)
+        opt = _optimizer(ctx, tcfg)
+        try:
+            obs = _obs(rgb, depth, tracking_camera(cam, tcfg, device), ctx, tcfg, opt)
+        except RuntimeError as e:
+            print(f"[b1e] {label}: skipped ({e})")
+            continue
+        base = opt.part_deltas.detach().clone()
+        with torch.no_grad():
+            m0 = opt._render(obs.roi_frames[0].camera, base, 0, True)["accumulation"].squeeze(-1) >= opt.config.dino_alpha_thresh
+            vals = []
+            for gdeg in ROLL_GRID:
+                d = torch.as_tensor(roll * np.radians(gdeg), dtype=torch.float64)
+                v, _ = _dino_masked(opt, obs, perturbed_deltas(base, 0, d), m0)
+                vals.append(v)
+        vals = np.asarray(vals)
+        am = {MASK_VARIANTS[j]: _argmin(ROLL_GRID, vals[:, j]) for j in range(3)}
+        rows.append({"view": label, "shadows": shadows, "loss": vals.tolist(), "argmin": am,
+                     "outside_share": float(1 - m0.float().mean())})
+        print(f"[b1e] {label}: " + ", ".join(f"{k}: {v:+.0f}" for k, v in am.items())
+              + f"  (outside-drill share of ROI {rows[-1]['outside_share']:.2f})", flush=True)
+    write_json(os.path.join(out, "masks.json"), {"roll_grid_deg": ROLL_GRID.tolist(), "variants": MASK_VARIANTS,
+                                                 "rows": rows})
+
+
+# --------------------------------------------------------------------------- #
 # summary
 # --------------------------------------------------------------------------- #
 
@@ -377,12 +457,26 @@ def summarise(out: str = OUT, title: str = "Direction B diagnostics (B0 ground t
             L += ["", "Per held-out view (DINO argmin): " +
                   ", ".join(f"{r['view'].replace('heldout ', '')}:{r['argmin']['dino']:+.0f}" for r in ho)]
         L.append("")
+    p = os.path.join(out, "masks.json")
+    if os.path.exists(p):
+        g = json.load(open(p))
+        L += ["## B1e: DINO roll argmin with the loss restricted to the drill (clean re-renders)", "",
+              "| View | " + " | ".join(g["variants"]) + " | outside-drill share of ROI |", "|---|---|---|---|---|"]
+        for r in g["rows"]:
+            if not r["view"].startswith("heldout"):
+                L.append(f"| {r['view']} | " + " | ".join(f"{r['argmin'][v]:+.0f}" for v in g["variants"])
+                         + f" | {r['outside_share']:.2f} |")
+        ho = [r for r in g["rows"] if r["view"].startswith("heldout")]
+        if ho:
+            L.append("| held-out ring r0.87 e30, mean abs argmin (n=%d) | " % len(ho) + " | ".join(
+                f"{np.mean([abs(r['argmin'][v]) for r in ho]):.1f}" for v in g["variants"]) + " | |")
+        L.append("")
     open(os.path.join(out, "summary.md"), "w").write("\n".join(L) + "\n")
     print("\n".join(L))
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["gt", "views", "grid", "context", "summarise"])
+    ap.add_argument("step", choices=["gt", "views", "grid", "context", "masks", "summarise"])
     a = ap.parse_args()
-    {"gt": gt_check, "views": views, "grid": grid_test, "context": context, "summarise": summarise}[a.step]()
+    {"gt": gt_check, "views": views, "grid": grid_test, "context": context, "masks": masks, "summarise": summarise}[a.step]()

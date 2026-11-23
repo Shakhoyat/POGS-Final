@@ -102,3 +102,24 @@ depend on the resolution, PCA dimension or layer, which were not tuned, on purpo
 would overfit the acceptance test.
 Upsampler (AnyUp, trained on DINOv2-S/14): implemented but not run. Loading it executes third-party hub code,
 which needs the user's approval. Its expected effect is bounded by the grid component (±3°).
+
+## Shadow step (B1e): restrict the DINO loss to the drill (`experiments/b_bias.py masks`, `data_results/b_bias/masks.json`)
+The release DINO loss averages ‖live − rendered‖ over the whole ROI. Outside the drill's outline the rendered
+feature is zero (alpha < 0.8), so those pixels contribute ‖live background feature‖. **87% of ROI pixels are
+outside the drill** (0.85–0.88 across views).
+
+| Condition (clean re-render, drill at the true pose) | release: whole ROI | inside drill rendered at each candidate pose | inside drill at the true pose (fixed) |
+|---|---|---|---|
+| tracking camera, gripper + shadow (= real frame 0) | **−10°** | +2° | **0°** |
+| tracking camera, gripper, no shadows | −2° | +4° | 0° |
+| tracking camera, no gripper | −6° | +3° | 0° |
+| tracking camera, no gripper, no shadows | −6° | +2° | 0° |
+| held-out ring r 0.87 m, elev 30°, 12 azimuths: mean abs argmin | 3.6° | 2.4° | 0.1° |
+
+Reading: **inside the drill's outline the DINO features point at the true pose in every view, with or without the
+shadow.** The bias, both the view-dependent ±5° and the shadow's −4°, comes from the background pixels. There the
+release loss acts as a silhouette term weighted by the background feature norm, which shadows and viewpoint
+change. A mask re-rendered at each candidate pose leaves a smaller bias of the opposite sign (+2…+4°), because the
+pixel set changes with pose. Caveat: the fixed mask here sits at the true pose, which leaks ground truth. In
+tracking it must come from the current estimate, so the next test places the mask at wrong poses (B1f) and
+checks whether the minimum returns to 0° or sticks to the mask.
