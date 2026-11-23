@@ -248,6 +248,8 @@ class RigidGroupOptimizer:
         # Optional extra loss on the pose (plan rev. 2 M2: e.g. an information-form prior from a filter);
         # callable(part_deltas, start_part_deltas) -> scalar tensor. None = release behaviour.
         self.extra_loss_fn = None
+        # TrackingConfig.dino_loss_region == "object_frame_start": per-ROI masks set at the start of step()
+        self._dino_region_masks: Optional[List[torch.Tensor]] = None
         self.frame: Optional[PosedObservation] = None
 
         # diagnostics: how often the Sec. IV-D depth term had to be rescued or
@@ -490,8 +492,13 @@ class RigidGroupOptimizer:
                 parts["real_rgb"].append(rf.rgb)
                 parts["rendered_rgb"].append(out["rgb"])
                 if use_dino:
-                    parts["real_dino"].append(rf.dino_feats.to(self.device))
-                    parts["rendered_dino"].append(L.gaussian_blur2d(out["dino"], cfg.blur_kernel_size))
+                    real_d = rf.dino_feats.to(self.device)
+                    rend_d = L.gaussian_blur2d(out["dino"], cfg.blur_kernel_size)
+                    region = self._dino_region(i, out)
+                    if region is not None:                    # not in the release (default "roi")
+                        real_d, rend_d = real_d[region], rend_d[region]
+                    parts["real_dino"].append(real_d)
+                    parts["rendered_dino"].append(rend_d)
                 parts["accumulation"].append(out["accumulation"])
                 if use_mask and rf.mask is not None:
                     parts["real_mask"].append(rf.mask)
@@ -528,6 +535,26 @@ class RigidGroupOptimizer:
             loss = bce if loss is None else loss + cfg.mask_loss_mult * bce
             stats["mask"] = float(bce.detach())
         return loss, stats
+
+    def _dino_region(self, i: int, out: Dict[str, torch.Tensor]) -> Optional[torch.Tensor]:
+        """Pixel mask for the DINO term of ROI ``i`` (``TrackingConfig.dino_loss_region``); None = all pixels."""
+        mode = self.config.dino_loss_region
+        if mode == "roi":
+            return None
+        if mode == "object_frame_start" and self._dino_region_masks is not None:
+            m = self._dino_region_masks[i]
+        elif mode in ("object", "object_frame_start"):
+            m = out["accumulation"].squeeze(-1).detach() >= self.config.dino_alpha_thresh
+        else:
+            raise ValueError(f"unknown dino_loss_region {mode!r}")
+        return m if bool(m.any()) else None          # object left the ROI: fall back to every pixel
+
+    @torch.no_grad()
+    def _frame_start_masks(self) -> Optional[List[torch.Tensor]]:
+        if self.config.dino_loss_region != "object_frame_start" or not self.frame or not self.frame.roi_frames:
+            return None
+        return [self._render(rf.camera, self.part_deltas.detach(), i, False)["accumulation"].squeeze(-1)
+                >= self.config.dino_alpha_thresh for i, rf in enumerate(self.frame.roi_frames)]
 
     # ------------------------------------------------------------------ #
     # initialisation (100 DINO-only steps + 70 with depth & ROI)
@@ -644,6 +671,7 @@ class RigidGroupOptimizer:
         t0 = time.time()
 
         self.prev_part_deltas = self.part_deltas.data.detach().clone()
+        self._dino_region_masks = self._frame_start_masks()
         stats: Dict[str, float] = {}
         loss_val = float("nan")
         for i in range(niter):
@@ -674,6 +702,7 @@ class RigidGroupOptimizer:
                 torch.nn.utils.clip_grad_norm_([self.part_deltas], cfg.clip_grad)
             self.part_optimizer.step()
             loss_val = float(loss.detach())
+        self._dino_region_masks = None
         for g in self.part_optimizer.param_groups:
             g["lr"] = cfg.pose_lr
         with torch.no_grad():

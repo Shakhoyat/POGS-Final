@@ -93,3 +93,29 @@ def test_damping_defaults_are_release_behaviour():
     from model.pogs.config import TrackingConfig
     c = TrackingConfig()
     assert c.step_damping_rot == 0.0 and c.step_damping_trans == 0.0
+
+
+def test_dino_loss_region_default_is_release_and_masks_apply():
+    from types import SimpleNamespace
+    from model.pogs.config import TrackingConfig
+    from model.pogs.tracking import RigidGroupOptimizer
+    assert TrackingConfig().dino_loss_region == "roi"
+    acc = torch.zeros(4, 4, 1)
+    acc[1:3, 1:3] = 0.9
+    out = {"accumulation": acc}
+    fake = SimpleNamespace(config=TrackingConfig(), _dino_region_masks=None)
+    assert RigidGroupOptimizer._dino_region(fake, 0, out) is None                  # release: all pixels
+    fake.config.dino_loss_region = "object"
+    m = RigidGroupOptimizer._dino_region(fake, 0, out)
+    assert m.shape == (4, 4) and int(m.sum()) == 4
+    fake.config.dino_loss_region = "object_frame_start"
+    fake._dino_region_masks = [torch.ones(4, 4, dtype=torch.bool)]
+    assert int(RigidGroupOptimizer._dino_region(fake, 0, out).sum()) == 16         # frame-start mask wins
+    fake._dino_region_masks = [torch.zeros(4, 4, dtype=torch.bool)]
+    assert RigidGroupOptimizer._dino_region(fake, 0, out) is None                  # empty -> all pixels
+    fake.config.dino_loss_region = "bogus"
+    try:
+        RigidGroupOptimizer._dino_region(fake, 0, out)
+        raise AssertionError("unknown mode must fail")
+    except ValueError:
+        pass

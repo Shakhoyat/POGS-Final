@@ -40,6 +40,10 @@ VARIANTS = {
     "depth100": ("POGS (depth x100)", dict(depth_loss_mult=100.0), "data_results/e2c_depth100"),
     # control for E2c: is a heavy depth weight a fix, or does it just switch DINO off? (POGS Table III ablation:
     # tracking without DINO features gave zero consecutive successful resets)
+    # shadow step (B1e): DINO term restricted to the object's rendered outline
+    "maskobj": ("POGS (DINO in object mask)", dict(dino_loss_region="object"), "data_results/e2d_maskobj"),
+    "maskstart": ("POGS (DINO in frame-start mask)", dict(dino_loss_region="object_frame_start"),
+                  "data_results/e2d_maskstart"),
     "depthonly": ("POGS (depth only, no DINO)", dict(use_dino=False), "data_results/e2c_depthonly"),
 }
 

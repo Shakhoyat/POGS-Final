@@ -221,6 +221,13 @@ class TrackingConfig:
     isotropic per block). Units: loss per rad^2."""
     step_damping_trans: float = 0.0
     """Not in the release (0 = off). Translation counterpart of ``step_damping_rot``; loss per m^2."""
+    dino_loss_region: str = "roi"
+    """Not in the release. Which ROI pixels the DINO term averages over: ``"roi"`` = every ROI pixel (release;
+    outside the object the render is 0, so background pixels add their live feature norm), ``"object"`` = pixels
+    inside the object rendered at the pose being evaluated (alpha >= dino_alpha_thresh), ``"object_frame_start"``
+    = inside the object rendered at the pose at the start of each frame's ``step()`` (fixed during its iterations;
+    initialisation falls back to ``"object"``). Direction B, `docs/results/b_bias_diagnostics_2026-11-23.md`
+    B1e: 87% of the drill ROI is background and carries the roll bias. Applies with ``use_roi`` only."""
     use_roi: bool = True
     use_mask_loss: bool = False
     mask_loss_mult: float = 0.6
