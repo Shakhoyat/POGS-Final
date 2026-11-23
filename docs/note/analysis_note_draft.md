@@ -52,8 +52,8 @@ come from the result files named in each section; nothing here is new data.
 | Fix | Single-frame argmin (tracking cam) | O4 trajectories (paper-faithful rule, paired vs POGS) | Status |
 |---|---|---|---|
 | RGB term, weight 1 (E2b) | −1° | worse: roll 14.3° vs 9.4°; −30° +0.28, +30° −0.20 | negative |
-| depth ×30 (E2c) | −6° | pending | running |
-| depth ×100 (E2c) | −3° | pending | queued |
+| depth ×30 (E2c) | −6° | fails: 0–2/25 (POGS 9–23/25); roll pre 4.0° but swing 29° once the gripper occludes | negative |
+| depth ×100 (E2c) | −3° | fails: 0/25 in all settings; roll pre 5.1°, swing 30° | negative |
 | features re-distilled, DINOv2 control (B2) | −9° (release −10°) | not run (control) | reproduces release |
 | DINOv2-reg (B2) | −6° | not run: held-out views worse (4.6° vs 2.9°) | rejected |
 | DINOv3 ViT-S/16 (B2) | −12° | not run: held-out 9.1°, up to +21° | rejected |

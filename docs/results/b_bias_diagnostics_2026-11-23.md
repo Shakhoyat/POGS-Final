@@ -174,3 +174,14 @@ iteration); suite 57 passed, 1 skipped. One-case smoke (`grasp_+15_s0`): roll be
 but post-perturbation recovery failed (tip 9.6 cm, swing 14°; POGS passed this case under the paper's rule). That
 is n = 1, so it is not evidence either way. The full O4 run (`bgdino`) is queued after E2c ×100, then the
 depth-only control and `maskobj`.
+
+## E2c result (depth weight on trajectories, O4 seeds 0–24, `data_results/e2c_depth{30,100}/summary.md`)
+| Rule | Setting | Static | POGS (3.7) | depth ×30 | depth ×100 |
+|---|---|---|---|---|---|
+| pre-registered | −30 / −15 / +15 / +30° | 0/0/0/0 | 3/7/1/6 | 1/0/0/0 | 0/0/0/0 |
+| paper-faithful | −30 / −15 / +15 / +30° | 0/0/0/0 | 9/12/16/23 | 2/1/0/0 | 0/0/0/0 |
+
+Abs roll before the perturbation: POGS 9.3–9.5°, ×30 4.0–4.3°, ×100 5.1–5.2°. Swing before the perturbation
+≈ 29° (×30) and 30° (×100), against 3.3° for POGS; it starts at frame 2, when the gripper reaches the drill.
+**Both weights fail the pass rule** (paired paper-faithful differences −0.28…−0.92, all CIs < 0). A heavier depth
+term does not fix the bias; it trades it for an occlusion failure.
