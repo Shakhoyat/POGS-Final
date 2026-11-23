@@ -63,6 +63,10 @@ come from the result files named in each section; nothing here is new data.
 | DINO loss inside the drill re-rendered per pose (`object`) | +2° | pending (`maskobj`) | queued |
 | DINO vs rendered background (`dino_background="rendered"`, B1g) | +2° (held-out mean abs 1.3°; shadow-insensitive) | fails: 0/25 everywhere; roll fixed on the table (frame 2: 0.6° vs 15.1°) but translation +1.5 cm from frame 0 and roll 13–18° in the lift: the static background is stale once the drill moves | negative |
 
+Depth-only control (DINO off): 0/25 in every setting, both rules (roll pre 10.8°, swing 25°). DINO is worth 9–23
+of 25 recoveries under the paper-faithful rule. Depth ×100 and the rendered background are no better than
+switching DINO off.
+
 ## 5b. Mechanism (B1e/B1f)
 87% of the ROI is background. There the release loss compares live features with a zero render, which acts as an
 implicit silhouette term. That term supplies the roll restoring force, and the cast shadow and viewpoint bias it

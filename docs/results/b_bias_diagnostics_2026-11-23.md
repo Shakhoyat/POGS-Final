@@ -212,3 +212,12 @@ drill when the background is rendered.
 **Pattern across all four fixes:** each simple substitute for the implicit silhouette term breaks a different
 assumption. Heavier depth fails under gripper occlusion. RGB fails under shading change (E2b). An inside-object
 mask loses the restoring force (B1f). A rendered background fails once the object leaves its scanned place.
+
+## Depth-only control (`use_dino=False`, O4 seeds 0–24, `data_results/e2c_depthonly/summary.md`)
+Pre-registered 0/0/0/0 of 25, paper-faithful 0/0/0/0 (POGS 3/7/1/6 and 9/12/16/23; Static 0). Abs roll before
+the perturbation 10.7–10.9°, swing before 25.2°, swing at N 35.6°, tip at N 10.8 cm. This agrees with the POGS
+ablation: without DINO, no resets succeed.
+
+What DINO contributes under the paper-faithful rule: 9–23 of 25 recoveries per setting. Depth ×100 (0/25) and
+the rendered background (0/25) match the depth-only control; depth ×30 (2/1/0/0) is barely above it. So
+**none of the fixes tested so far keeps what the DINO term contributes while removing its bias.**
