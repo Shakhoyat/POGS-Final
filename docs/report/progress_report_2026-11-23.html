@@ -104,7 +104,7 @@ section { display: grid; gap: 14px; }
       <tr><td class="id">O2</td><td>Model / Data / Metrics structure; Python 3.12, CUDA 13.0, PyTorch 2.14</td><td>layout</td><td class="num">57 tests pass</td><td><span class="pill good">Met</span></td></tr>
       <tr><td class="id">O3</td><td>Tool perturbation recovery, step-wise to 30°</td><td>30°</td><td class="num">5/5 at every step size; jumps hold to 60°</td><td><span class="pill good">Met</span></td></tr>
       <tr><td class="id">O4</td><td>In-grasp perturbation recovery rate</td><td>80%</td><td class="num">4 to 28% (strict); 34 to 78% (paper rule)</td><td><span class="pill crit">Not met</span></td></tr>
-      <tr><td class="id">O5</td><td>Latency of each 2D model</td><td>per model</td><td class="num">5 of 10 on target stack; 5 blocked or old stack</td><td><span class="pill warn">Partly</span></td></tr>
+      <tr><td class="id">O5</td><td>Latency of each 2D model</td><td>per model</td><td class="num">8 of 11 measured (one on an earlier stack)</td><td><span class="pill warn">Partly</span></td></tr>
       <tr><td class="id">O6</td><td>Tracking frequency</td><td>5 Hz</td><td class="num">5.7 Hz at 100% ADD-S in one setting (3 seeds)</td><td><span class="pill warn">Partly</span></td></tr>
     </tbody>
   </table>
@@ -139,7 +139,7 @@ section { display: grid; gap: 14px; }
     <figure>
       <h3>O5 · Model latency on the target stack</h3>
       <div class="chart" id="c-o5"></div>
-      <figcaption><b>Median per image, fastest of fp32 and fp16.</b> Not measured: Detic (detectron2 does not build on Python 3.12), LocateAnything3D (VRAM), SigLIP2 (input-size error, fixable), DINOv3 (gated weights), VFM-DETR (no public code found).</figcaption>
+      <figcaption><b>Median per image, fastest of fp32 and fp16.</b> Also measured: SigLIP2 12.5 ms, DINOv3 ViT-S/16 19.0 ms (public timm weights). Not measured: Detic (detectron2 does not build on Python 3.12), LocateAnything3D (VRAM), VFM-DETR (no public code found).</figcaption>
     </figure>
     <figure>
       <h3>O4 · Where the error is</h3>
@@ -193,7 +193,7 @@ section { display: grid; gap: 14px; }
     <figure>
       <h3>Fixes tested on the same 100 in-grasp trials</h3>
       <div class="chart" id="c-fixes"></div>
-      <figcaption><b>Recoveries out of 100 under the paper's rule.</b> None passes the rule set in advance. RGB is higher in total but significantly worse at +30° and doubles the roll error, so it fails.</figcaption>
+      <figcaption><b>Recoveries out of 100 under the paper's rule.</b> None passes the rule set in advance. RGB is higher in total but significantly worse at +30° and raises the roll error by half (14° vs 9.4°), so it fails.</figcaption>
     </figure>
   </div>
 </section>
