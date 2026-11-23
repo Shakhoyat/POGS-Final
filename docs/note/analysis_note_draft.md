@@ -3,6 +3,13 @@
 Status: living draft, 2026-11-23. Simulation only. One splat (≥ 3 splats before submission, T7). The numbers
 come from the result files named in each section; nothing here is new data.
 
+## Framing (user review 2026-11-23)
+This is a mechanism finding about feature-field tracking in general, not a failed reproduction. **The DINO
+loss of distilled-feature trackers gets much of its pose restoring force from an implicit silhouette term (live
+background vs a zero render), and that term is what lighting, shadows and viewpoint bias.** Evidence chain:
+ground truth exact (B0) → object features unbiased (B1e) → the background does the work (masking it collapses
+recovery: 1/0/4/4 vs 9/12/16/23) → the DINO term matters (depth only: 0 everywhere).
+
 ## Thesis in three sentences
 1. The POGS drill result (48/50 at ≤ 15°, 40/50 at 30°) uses a rule that leaves roll about the bit axis free
    (Sec. V-B). Under that rule our re-implementation matches the 30° tier in one direction (+30°: 39/50 vs
@@ -67,6 +74,15 @@ come from the result files named in each section; nothing here is new data.
 Depth-only control (DINO off): 0/25 in every setting, both rules (roll pre 10.8°, swing 25°). DINO is worth 9–23
 of 25 recoveries under the paper-faithful rule. Depth ×100 and the rendered background are no better than
 switching DINO off.
+
+Note on the frame-start mask: the 5-seed check (1/0/2/2 vs 1/2/3/5 of 5) is too small to carry weight. It is
+*consistent with* the B1f prediction (the estimate sticks), not a confirmation.
+
+**The ± asymmetry is not explained by the mechanism alone.** Share of positive signed pre-perturbation yaw error
+(100 cases each): POGS 83% (median +1.9°), RGB 79%, depth only 72% (+17°), depth ×30 77%, rendered background
+**20% (−4.8°)**, DINO inside the outline 100% (+21.7°). The background treatment controls the sign of the yaw
+bias, but a positive bias survives with DINO switched off. The asymmetry has more than one contributor and is
+left open. Caveat: depth-only and masked runs lose the drill, so their medians partly reflect tracking failure.
 
 ## 5b. Mechanism (B1e/B1f)
 87% of the ROI is background. There the release loss compares live features with a zero render, which acts as an

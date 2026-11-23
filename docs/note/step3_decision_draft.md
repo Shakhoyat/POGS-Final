@@ -33,3 +33,9 @@ Questions for you / the supervisor:
 1. Is an analysis paper (RA-L or a workshop) an acceptable outcome, or is a method gain required?
 2. May tracking use a known gripper model (robot kinematics) to exclude its pixels? That is ground-truth-free
    on a real robot, but it adds an input POGS does not use.
+
+## Decision (user, 2026-11-23)
+Step 3 skipped. Write the note now. Run the depth-silhouette test (option a) **only if the supervisor says
+yes to question 2**, pre-registered in `docs/note/dsil_preregistration.md` (GPU cap 6 h, pass rule 8.E2c vs a
+reference POGS with the same gripper exclusion). Both questions go to the supervisor
+(`docs/note/supervisor_message_draft.md`).
