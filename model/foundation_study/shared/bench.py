@@ -280,7 +280,7 @@ def resolution_for(name: str, scene_w: int = cfg.IMAGE_W,
     counts and the latency figure would be meaningless.
     """
     stage = cfg.MODELS[name]["stage"]
-    if name in ("clip_vitb16", "mobileclipv2"):
+    if name in ("clip_vitb16", "mobileclipv2", "siglip2"):  # siglip2 = siglip2-base-patch16-224, same constraint
         # Both are open_clip encoders with position embeddings fixed at
         # 224x224 (196 tokens at patch 16); POGS' OpenCLIPNetwork resizes
         # every patch to that size before encoding

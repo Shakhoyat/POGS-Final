@@ -1,0 +1,9 @@
+{
+ "written": "2026-11-23",
+ "protocol": "model/foundation_study/shared/bench.py time_model: 20 warmup, 100 iters, cuda synchronize; RTX 4070, torch 2.14.1+cu130; GPU otherwise idle",
+ "siglip2": {"weights": "google/siglip2-base-patch16-224", "res": "224x224", "fp32_median_ms": 12.45, "fp16_median_ms": 18.68,
+             "note": "previously BLOCKED by a harness bug (scene-sized grid for a 224-only encoder); fixed in bench.resolution_for"},
+ "dinov3_vits16_timm": {"res": "1248x704", "fp32_median_ms": 45.6, "fp16_median_ms": 19.04, "note": "ungated timm weights vit_small_patch16_dinov3.lvd1689m; harness resolution 1260 not divisible by 16, rounded down"},
+ "dinov3_vitb16_timm": {"res": "1248x704", "fp32_median_ms": 104.03, "fp16_median_ms": 27.13, "note": "ungated timm weights vit_base_patch16_dinov3.lvd1689m (the study's gated choice is ViT-B/16)"},
+ "script": "tools/o5_dinov3_timm.py"
+}
