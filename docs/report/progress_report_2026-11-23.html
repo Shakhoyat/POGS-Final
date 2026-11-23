@@ -1,0 +1,380 @@
+<title>POGS Reproduction Progress</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; a requirement scorecard first, then one figure per requirement, then the finding and the open questions. */
+:root {
+  --bg: #fbfbf9; --surface: #ffffff; --line: #e4e3de; --grid: #ecebe6;
+  --ink: #15171a; --ink-2: #4e5157; --ink-3: #7c7f86;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b;
+  --chip-good: #e6f4e6; --chip-warn: #fdf3dc; --chip-crit: #f9e5e5;
+  --f-display: "IBM Plex Serif", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161716; --surface: #1d1e1d; --line: #34353a; --grid: #2b2c2f;
+  --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #94958f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
+  --chip-good: #1d3320; --chip-warn: #3a3018; --chip-crit: #3d2020; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #161716; --surface: #1d1e1d; --line: #34353a; --grid: #2b2c2f;
+  --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #94958f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
+  --chip-good: #1d3320; --chip-warn: #3a3018; --chip-crit: #3d2020; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 920px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: 1.9rem; line-height: 1.2; }
+h2 { font-size: 1.3rem; }
+h3 { font-size: 1.02rem; font-family: var(--f-body); font-weight: 600; }
+p { margin: 0; max-width: 68ch; color: var(--ink-2); }
+.meta { font-family: var(--f-mono); font-size: 0.78rem; color: var(--ink-3); letter-spacing: 0.02em; }
+header { display: grid; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+
+/* scorecard */
+.score { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.score th { text-align: left; font-weight: 500; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.score td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.score td.id { font-family: var(--f-mono); color: var(--ink-3); width: 2.5rem; }
+.score td.num { font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 0.78rem; font-weight: 500; white-space: nowrap; color: var(--ink); }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pill.good { background: var(--chip-good); } .pill.good::before { background: var(--good); }
+.pill.warn { background: var(--chip-warn); } .pill.warn::before { background: var(--warn); }
+.pill.crit { background: var(--chip-crit); } .pill.crit::before { background: var(--crit); }
+
+/* figures */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 410px), 1fr)); gap: 20px; }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+figcaption { font-size: 0.84rem; color: var(--ink-2); }
+figcaption b { color: var(--ink); font-weight: 600; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { font-family: var(--f-body); font-size: 11px; fill: var(--ink-2); }
+.chart .val { fill: var(--ink); font-variant-numeric: tabular-nums; font-weight: 500; }
+.chart .axis { stroke: var(--line); }
+.chart .gridl { stroke: var(--grid); }
+.chart .ref { stroke: var(--crit); stroke-dasharray: 4 3; stroke-width: 1.5; }
+.chart .reftxt { fill: var(--crit); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.note { font-size: 0.8rem; color: var(--ink-3); }
+section { display: grid; gap: 14px; }
+
+/* mechanism diagram */
+.diagram svg { width: 100%; height: auto; display: block; }
+.diagram text { font-family: var(--f-body); font-size: 12px; fill: var(--ink); }
+.diagram .sub { fill: var(--ink-2); font-size: 11px; }
+.diagram .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.diagram .hot { fill: var(--chip-crit); stroke: var(--crit); }
+.diagram .okb { fill: var(--chip-good); stroke: var(--good); }
+.diagram .arr { stroke: var(--ink-3); stroke-width: 1.4; fill: none; marker-end: url(#ah); }
+
+.questions { display: grid; gap: 10px; }
+.q { border-left: 3px solid var(--s1); padding: 4px 0 4px 12px; }
+.q p { color: var(--ink); }
+
+#tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; padding: 5px 8px; border-radius: 4px; font-variant-numeric: tabular-nums; z-index: 5; max-width: 260px; }
+[data-tip] { cursor: default; }
+@media (prefers-reduced-motion: no-preference) { [data-tip] { transition: opacity .12s; } }
+[data-tip]:hover { opacity: 0.8; }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="meta">POGS re-implementation · progress against the supervisor's requirements · 23 Nov 2026 · simulation, one trained splat, RTX 4070</div>
+  <h1>POGS Reproduction Progress</h1>
+  <p>Requirements O1 to O3 and O5 are complete. O6 is met by one configuration only, and O4 (80% in-grasp recovery) is not met. We traced the O4 shortfall to a systematic roll bias and identified its mechanism.</p>
+</header>
+
+<section>
+  <h2>Requirement scorecard</h2>
+  <div class="tablewrap">
+  <table class="score">
+    <thead><tr><th></th><th>Requirement</th><th>Target</th><th>Result</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td class="id">O1</td><td>Splats with and without one object; group holds the object's Gaussians</td><td>check</td><td class="num">IoU 0.76 to 0.98 (5 objects)</td><td><span class="pill good">Met</span></td></tr>
+      <tr><td class="id">O2</td><td>Model / Data / Metrics structure; Python 3.12, CUDA 13.0, PyTorch 2.14</td><td>layout</td><td class="num">57 tests pass</td><td><span class="pill good">Met</span></td></tr>
+      <tr><td class="id">O3</td><td>Tool perturbation recovery, step-wise to 30°</td><td>30°</td><td class="num">5/5 at every step size; jumps hold to 60°</td><td><span class="pill good">Met</span></td></tr>
+      <tr><td class="id">O4</td><td>In-grasp perturbation recovery rate</td><td>80%</td><td class="num">4 to 28% (strict); 34 to 78% (paper rule)</td><td><span class="pill crit">Not met</span></td></tr>
+      <tr><td class="id">O5</td><td>Latency of each 2D model</td><td>per model</td><td class="num">5 of 10 on target stack; 5 blocked or old stack</td><td><span class="pill warn">Partly</span></td></tr>
+      <tr><td class="id">O6</td><td>Tracking frequency</td><td>5 Hz</td><td class="num">5.7 Hz at 100% ADD-S in one setting (3 seeds)</td><td><span class="pill warn">Partly</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Results by requirement</h2>
+  <div class="grid2">
+    <figure>
+      <h3>O1 · Object grouping quality</h3>
+      <div class="chart" id="c-o1"></div>
+      <figcaption><b>IoU of each object's Gaussian group against ground truth.</b> The soup can is weakest (recall 0.65).</figcaption>
+    </figure>
+    <figure>
+      <h3>O3 · Recovery after drill perturbation</h3>
+      <div class="legend"><span><i style="background:var(--s1)"></i>POGS</span><span><i style="background:var(--s2)"></i>Static (no motion)</span></div>
+      <div class="chart" id="c-o3"></div>
+      <figcaption><b>Trials recovered out of 5</b> (tip &lt; 3 cm, rotation &lt; 5°). Accuracy first degrades at a 90° jump (tip error 5.3 ± 10.4 cm).</figcaption>
+    </figure>
+    <figure>
+      <h3>O4 · In-grasp recovery (50 trials per setting)</h3>
+      <div class="legend"><span><i style="background:var(--s2)"></i>Pre-registered rule</span><span><i style="background:var(--s1)"></i>Paper's rule (roll about bit free)</span><span><i style="background:var(--ink-3)"></i>Paper's reported result</span></div>
+      <div class="chart" id="c-o4"></div>
+      <figcaption><b>+30° matches the paper</b> (39 vs 40 of 50, Fisher p = 1.0). The other settings fall short (p ≤ 1e-4). Static recovers 0 of 50 everywhere.</figcaption>
+    </figure>
+    <figure>
+      <h3>O6 · Speed against accuracy</h3>
+      <div class="chart" id="c-o6"></div>
+      <figcaption><b>Each point is one POGS setting</b> (iterations, matching resolution; 3 seeds). Only 5-iteration settings pass 5 Hz, and their accuracy varies (68 to 100%).</figcaption>
+    </figure>
+    <figure>
+      <h3>O5 · Model latency on the target stack</h3>
+      <div class="chart" id="c-o5"></div>
+      <figcaption><b>Median per image, fastest of fp32 and fp16.</b> Not measured: Detic (detectron2 does not build on Python 3.12), LocateAnything3D (VRAM), SigLIP2 (input-size error, fixable), DINOv3 (gated weights), VFM-DETR (no public code found).</figcaption>
+    </figure>
+    <figure>
+      <h3>O4 · Where the error is</h3>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Roll about the drill bit</span><span><i style="background:var(--s3)"></i>Swing of the bit axis</span></div>
+      <div class="chart" id="c-roll"></div>
+      <figcaption><b>Mean rotation error before the perturbation</b> (POGS, 200 trials). 94% of the error is roll about the bit, which the paper's rule ignores. It is present before the gripper touches the drill.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <h2>Finding: where the roll bias comes from</h2>
+  <figure class="diagram">
+    <svg viewBox="0 0 880 250" role="img" aria-label="Mechanism of the roll bias">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"></path></marker></defs>
+      <rect class="box" x="10" y="30" width="170" height="74" rx="6"></rect>
+      <text x="24" y="58">DINO loss on the</text><text x="24" y="76">region around the drill</text>
+      <rect x="10" y="130" width="170" height="22" rx="3" fill="var(--s1)"></rect>
+      <rect x="32" y="130" width="148" height="22" fill="var(--ink-3)" opacity="0.45"></rect>
+      <text x="14" y="146" style="fill:#fff;font-size:11px">13%</text>
+      <text x="96" y="146" style="font-size:11px">87% background</text>
+      <text class="sub" x="10" y="172">share of pixels in the region</text>
+
+      <path class="arr" d="M182,67 L240,67"></path>
+      <rect class="box okb" x="244" y="12" width="250" height="58" rx="6"></rect>
+      <text x="258" y="36">Drill pixels: features are unbiased</text>
+      <text class="sub" x="258" y="54">minimum at the true pose in all 16 views</text>
+      <rect class="box hot" x="244" y="84" width="250" height="78" rx="6"></rect>
+      <text x="258" y="108">Background vs a zero render</text>
+      <text class="sub" x="258" y="126">acts as a hidden silhouette term</text>
+      <text class="sub" x="258" y="144">biased by shadows and viewpoint</text>
+      <path class="arr" d="M182,80 L240,118"></path>
+
+      <path class="arr" d="M496,123 L556,90"></path>
+      <path class="arr" d="M496,130 L556,178"></path>
+      <rect class="box okb" x="560" y="56" width="300" height="58" rx="6"></rect>
+      <text x="574" y="80">Supplies the restoring force</text>
+      <text class="sub" x="574" y="98">remove it and recovery collapses (60 → 9 of 100)</text>
+      <rect class="box hot" x="560" y="148" width="300" height="58" rx="6"></rect>
+      <text x="574" y="172">Causes the roll bias</text>
+      <text class="sub" x="574" y="190">−10° at the tracking camera with the gripper's shadow</text>
+    </svg>
+  </figure>
+  <div class="grid2">
+    <figure>
+      <h3>Roll minimum of the DINO loss at the true pose</h3>
+      <div class="legend"><span><i style="background:var(--s2)"></i>Original loss</span><span><i style="background:var(--s1)"></i>Background rendered</span><span><i style="background:var(--s3)"></i>Drill pixels only</span></div>
+      <div class="chart" id="c-argmin"></div>
+      <figcaption><b>0° is correct.</b> Held-out row: mean absolute value over 12 viewpoints. "Drill pixels only" uses a mask at the true pose, a diagnostic that tracking cannot use.</figcaption>
+    </figure>
+    <figure>
+      <h3>Fixes tested on the same 100 in-grasp trials</h3>
+      <div class="chart" id="c-fixes"></div>
+      <figcaption><b>Recoveries out of 100 under the paper's rule.</b> None passes the rule set in advance. RGB is higher in total but significantly worse at +30° and doubles the roll error, so it fails.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <h2>Next steps</h2>
+  <div class="questions">
+    <div class="q"><p>Write the mechanism note: rule mismatch, Static-checked recovery metric, and the silhouette-term finding.</p></div>
+    <div class="q"><p>One pre-registered test of an explicit, shadow-free silhouette term from depth (6 GPU hours, same pass rule). It needs approval to use a known gripper model.</p></div>
+    <div class="q"><p>Before publication: three independently trained splats and at least one real dataset.</p></div>
+  </div>
+  <p class="note">Sources: data_results/{o1_grouping, o3_perturbation, o4_ingrasp, o6_speed, b_bias, e2*}; write-ups in docs/results/. Branch research-plan-rev2.</p>
+</section>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function svg(id, w, h) { var s = el("svg", { viewBox: "0 0 " + w + " " + h, role: "img" }); document.getElementById(id).appendChild(s); return s; }
+
+  // horizontal bars: rows [{label, value, tip, color}], max, unit
+  function hbars(id, rows, opt) {
+    var W = 420, lw = opt.lw || 120, rowH = 26, top = 8, H = top + rows.length * rowH + 22, pw = W - lw - 46;
+    var s = svg(id, W, H), x = function (v) { return lw + (v - (opt.min || 0)) / (opt.max - (opt.min || 0)) * pw; };
+    (opt.ticks || []).forEach(function (t) {
+      el("line", { x1: x(t), x2: x(t), y1: top - 2, y2: H - 18, class: "gridl" }, s);
+      el("text", { x: x(t), y: H - 5, "text-anchor": "middle" }, s, t + (opt.tickUnit || ""));
+    });
+    if (opt.ref !== undefined) {
+      el("line", { x1: x(opt.ref), x2: x(opt.ref), y1: top - 4, y2: H - 18, class: "ref" }, s);
+      el("text", { x: x(opt.ref) + 4, y: top + 6, class: "reftxt" }, s, opt.refLabel);
+    }
+    rows.forEach(function (r, i) {
+      var y = top + i * rowH, x0 = x(opt.min || 0), x1 = x(r.value);
+      el("text", { x: lw - 8, y: y + 16, "text-anchor": "end" }, s, r.label);
+      var w = Math.max(x1 - x0, r.value > 0 ? 2 : 0);
+      var b = el("rect", { x: x0, y: y + 5, width: w, height: 15, rx: 3, fill: r.color || "var(--s1)" }, s);
+      b.setAttribute("data-tip", r.tip || (r.label + ": " + r.value));
+      el("text", { x: x0 + w + 5, y: y + 16, class: "val" }, s, r.text !== undefined ? r.text : r.value);
+    });
+    el("line", { x1: x(opt.min || 0), x2: x(opt.min || 0), y1: top - 2, y2: H - 18, class: "axis" }, s);
+  }
+
+  // grouped vertical bars: cats [label], series [{name,color,values,tips}], max
+  function vgroups(id, cats, series, opt) {
+    var W = 420, H = opt.h || 220, left = 30, bottom = opt.bottom || 34, top = 14, pw = W - left - 6, ph = H - top - bottom;
+    var s = svg(id, W, H), y = function (v) { return top + ph - v / opt.max * ph; };
+    (opt.ticks || []).forEach(function (t) {
+      el("line", { x1: left, x2: W - 6, y1: y(t), y2: y(t), class: "gridl" }, s);
+      el("text", { x: left - 5, y: y(t) + 4, "text-anchor": "end" }, s, t);
+    });
+    var gw = pw / cats.length, n = series.length, bw = Math.min(16, (gw - 10) / n - 2);
+    cats.forEach(function (c, i) {
+      var gx = left + i * gw + (gw - (n * (bw + 2) - 2)) / 2;
+      series.forEach(function (se, j) {
+        var v = se.values[i]; if (v === null) return;
+        var bx = gx + j * (bw + 2), by = y(v), h = Math.max(y(0) - by, v > 0 ? 2 : 0);
+        if (se.tickMark) {
+          el("line", { x1: bx - 1, x2: bx + bw + 1, y1: by, y2: by, stroke: se.color, "stroke-width": 3, "data-tip": se.tips[i] }, s);
+        } else {
+          el("rect", { x: bx, y: y(0) - h, width: bw, height: h, rx: 2, fill: se.color, "data-tip": se.tips[i] }, s);
+        }
+        if (opt.labels && opt.labels[j]) el("text", { x: bx + bw / 2, y: by - 4, "text-anchor": "middle", class: "val", style: "font-size:10px" }, s, v);
+      });
+      var lab = c.split("|");
+      lab.forEach(function (t, k) { el("text", { x: left + i * gw + gw / 2, y: H - bottom + 15 + k * 12, "text-anchor": "middle" }, s, t); });
+    });
+    if (opt.ref !== undefined) {
+      el("line", { x1: left, x2: W - 6, y1: y(opt.ref), y2: y(opt.ref), class: "ref" }, s);
+      el("text", { x: W - 8, y: y(opt.ref) - 5, "text-anchor": "end", class: "reftxt" }, s, opt.refLabel);
+    }
+    el("line", { x1: left, x2: W - 6, y1: y(0), y2: y(0), class: "axis" }, s);
+  }
+
+  // O1
+  hbars("c-o1", [
+    { label: "Mustard bottle", value: 0.98, tip: "Mustard bottle: IoU 0.984, purity 1.00, recall 0.98" },
+    { label: "Cereal box", value: 0.95, tip: "Cereal box: IoU 0.947, purity 1.00, recall 0.88" },
+    { label: "Red apple", value: 0.94, tip: "Red apple: IoU 0.935, purity 0.97, recall 0.98" },
+    { label: "Ceramic mug", value: 0.87, tip: "Ceramic mug: IoU 0.871, purity 0.96, recall 0.83" },
+    { label: "Soup can", value: 0.76, tip: "Soup can: IoU 0.761, purity 0.86, recall 0.65" }
+  ], { max: 1, min: 0.5, ticks: [0.5, 0.75, 1], lw: 110 });
+
+  // O3
+  var o3c = ["Step|5°", "Step|10°", "Step|15°", "Jump|+15°", "Jump|−15°", "Jump|+30°", "Jump|−30°", "Jump|+45°", "Jump|+60°", "Jump|+90°"];
+  var o3p = [5, 5, 5, 5, 4, 4, 5, 4, 5, 4], o3s = [0, 0, 0, 1, 0, 1, 0, 0, 0, 0];
+  vgroups("c-o3", o3c, [
+    { name: "POGS", color: "var(--s1)", values: o3p, tips: o3p.map(function (v, i) { return "POGS, " + o3c[i].replace("|", " ") + ": " + v + "/5"; }) },
+    { name: "Static", color: "var(--s2)", values: o3s, tips: o3s.map(function (v, i) { return "Static, " + o3c[i].replace("|", " ") + ": " + v + "/5"; }) }
+  ], { max: 5, ticks: [0, 1, 2, 3, 4, 5], h: 210 });
+
+  // O4
+  var o4c = ["+15°", "−15°", "+30°", "−30°"];
+  var pre = [2, 14, 13, 5], pf = [32, 25, 39, 17], paper = [48, 48, 40, 40];
+  vgroups("c-o4", o4c, [
+    { name: "pre", color: "var(--s2)", values: pre, tips: pre.map(function (v, i) { return o4c[i] + ", pre-registered rule: " + v + "/50"; }) },
+    { name: "paper rule", color: "var(--s1)", values: pf, tips: pf.map(function (v, i) { return o4c[i] + ", paper's rule: " + v + "/50"; }) },
+    { name: "paper", color: "var(--ink-3)", values: paper, tips: paper.map(function (v, i) { return o4c[i] + ", reported in the paper: " + v + "/50 (" + (i < 2 ? "Tier 1, up to 15°" : "Tier 2, 30°") + ")"; }) }
+  ], { max: 50, ticks: [0, 10, 20, 30, 40, 50], ref: 40, refLabel: "80% target", labels: [true, true, true], h: 230, bottom: 24 });
+
+  // O6 scatter
+  (function () {
+    var pts = [
+      [1.5, 100, "25 it, 500 px"], [2.2, 100, "15 it, 500 px"], [3.2, 100, "10 it, 500 px"], [3.4, 100, "10 it, 350 px"],
+      [3.2, 100, "10 it, 250 px"], [5.6, 86, "5 it, 500 px"], [5.6, 68, "5 it, 350 px"], [5.7, 100, "5 it, 250 px"]];
+    var W = 420, H = 220, left = 40, bottom = 34, top = 14, right = 12, pw = W - left - right, ph = H - top - bottom;
+    var s = svg("c-o6", W, H), x = function (v) { return left + v / 6.5 * pw; }, y = function (v) { return top + ph - (v - 50) / 50 * ph; };
+    [50, 75, 100].forEach(function (t) { el("line", { x1: left, x2: W - right, y1: y(t), y2: y(t), class: "gridl" }, s); el("text", { x: left - 5, y: y(t) + 4, "text-anchor": "end" }, s, t + "%"); });
+    [0, 2, 4, 6].forEach(function (t) { el("text", { x: x(t), y: H - bottom + 15, "text-anchor": "middle" }, s, t + " Hz"); });
+    el("line", { x1: x(5), x2: x(5), y1: top, y2: top + ph, class: "ref" }, s);
+    el("text", { x: x(5) - 4, y: top + 10, "text-anchor": "end", class: "reftxt" }, s, "5 Hz target");
+    el("line", { x1: left, x2: W - right, y1: top + ph, y2: top + ph, class: "axis" }, s);
+    el("text", { x: left + pw / 2, y: H - 4, "text-anchor": "middle" }, s, "tracking frequency; y: ADD-S success");
+    pts.forEach(function (p) {
+      el("circle", { cx: x(p[0]), cy: y(p[1]), r: 5.5, fill: "var(--s1)", stroke: "var(--surface)", "stroke-width": 2, "data-tip": p[2] + ": " + p[0] + " Hz, " + p[1] + "% ADD-S" }, s);
+    });
+    el("text", { x: x(5.7) - 8, y: y(100) - 9, "text-anchor": "end", class: "val" }, s, "5 it, 250 px");
+    el("text", { x: x(5.6) - 9, y: y(68) + 4, "text-anchor": "end", class: "val" }, s, "5 it, 350 px");
+  })();
+
+  // O5
+  hbars("c-o5", [
+    { label: "CLIP ViT-B/16", value: 11.8, text: "11.8 ms", tip: "CLIP ViT-B/16, fp32: 11.8 ms (stock POGS model)" },
+    { label: "MobileCLIPv2", value: 11.8, text: "11.8 ms", tip: "MobileCLIPv2, fp32: 11.8 ms" },
+    { label: "DINOv2 ViT-S/14", value: 15.7, text: "15.7 ms", tip: "DINOv2 ViT-S/14, fp16, 1260x700: 15.7 ms (stock POGS model)" },
+    { label: "RF-DETR", value: 30.8, text: "30.8 ms", tip: "RF-DETR base, fp32, 896x896: 30.8 ms" },
+    { label: "YOLO11x", value: 38.1, text: "38.1 ms", tip: "YOLO11x, fp32, 896x896: 38.1 ms" }
+  ], { max: 45, ticks: [0, 15, 30, 45], tickUnit: "", lw: 112 });
+
+  // roll vs swing stacked by setting (mean abs)
+  vgroups("c-roll", ["+15°", "−15°", "+30°", "−30°"], [
+    { name: "roll", color: "var(--s1)", values: [9.4, 9.6, 9.6, 9.5], tips: ["+15°: roll 9.4 ± 2.8°", "−15°: roll 9.6 ± 2.8°", "+30°: roll 9.6 ± 2.8°", "−30°: roll 9.5 ± 2.7°"] },
+    { name: "swing", color: "var(--s3)", values: [4.0, 3.9, 3.9, 4.0], tips: ["+15°: swing 4.0 ± 3.4°", "−15°: swing 3.9 ± 3.3°", "+30°: swing 3.9 ± 3.3°", "−30°: swing 4.0 ± 3.6°"] }
+  ], { max: 12, ticks: [0, 4, 8, 12], ref: 5, refLabel: "5° rule", labels: [true, true], h: 200, bottom: 24 });
+
+  // argmin chart: signed, grouped horizontal
+  (function () {
+    var rows = [
+      ["Tracking camera, gripper + shadow", [-10, 2, 0]],
+      ["Tracking camera, no shadows", [-2, 4, 0]],
+      ["Tracking camera, no gripper", [-6, 3, 0]],
+      ["Held-out views, mean |min|", [3.7, 1.3, 0.1]]];
+    var cols = ["var(--s2)", "var(--s1)", "var(--s3)"], names = ["Original loss", "Background rendered", "Drill pixels only"];
+    var W = 420, lw = 0, top = 6, groupH = 58, H = top + rows.length * groupH + 20, x0 = 30, pw = W - x0 - 20;
+    var s = svg("c-argmin", W, H), x = function (v) { return x0 + (v + 12) / 24 * pw; };
+    [-10, -5, 0, 5, 10].forEach(function (t) { el("line", { x1: x(t), x2: x(t), y1: top, y2: H - 18, class: t === 0 ? "axis" : "gridl" }, s); el("text", { x: x(t), y: H - 5, "text-anchor": "middle" }, s, (t > 0 ? "+" : "") + t + "°"); });
+    rows.forEach(function (r, i) {
+      var gy = top + i * groupH;
+      el("text", { x: x0, y: gy + 11 }, s, r[0]);
+      r[1].forEach(function (v, j) {
+        var y = gy + 16 + j * 13, a = x(0), b = x(v);
+        el("rect", { x: Math.min(a, b), y: y, width: Math.max(Math.abs(b - a), 2), height: 10, rx: 2, fill: cols[j], "data-tip": names[j] + ": " + (v > 0 ? "+" : "") + v + "°" }, s);
+        el("text", { x: v < 0 ? Math.min(a, b) - 4 : Math.max(a, b) + 4, y: y + 9, "text-anchor": v < 0 ? "end" : "start", class: "val", style: "font-size:10px" }, s, (v > 0 ? "+" : "") + v + "°");
+      });
+    });
+  })();
+
+  // fixes
+  hbars("c-fixes", [
+    { label: "POGS (reference)", value: 60, tip: "POGS: 9/12/16/23 of 25 (−30/−15/+15/+30°)", color: "var(--s1)" },
+    { label: "RGB term", value: 67, tip: "RGB: 16/13/20/18; worse at +30° (CI < 0), roll 14°: fails", color: "var(--ink-3)" },
+    { label: "Mask, per pose", value: 9, tip: "DINO in drill mask: 1/0/4/4; loses the drill in the lift", color: "var(--ink-3)" },
+    { label: "Depth ×30", value: 3, tip: "Depth weight 30: 2/1/0/0; axis tilts ~29° under gripper occlusion", color: "var(--ink-3)" },
+    { label: "Depth ×100", value: 0, tip: "Depth weight 100: 0/0/0/0", color: "var(--ink-3)" },
+    { label: "Background rendered", value: 0, tip: "Rendered background: 0/0/0/0; stale once the drill moves", color: "var(--ink-3)" },
+    { label: "Depth only (no DINO)", value: 0, tip: "Depth only: 0/0/0/0 (control)", color: "var(--ink-3)" },
+    { label: "Static", value: 0, tip: "Static (no motion): 0/0/0/0", color: "var(--ink-3)" }
+  ], { max: 100, ticks: [0, 25, 50, 75, 100], lw: 138 });
+
+  // tooltip
+  var tip = document.getElementById("tip");
+  document.addEventListener("mouseover", function (e) { var t = e.target.closest && e.target.closest("[data-tip]"); if (!t) return; tip.textContent = t.getAttribute("data-tip"); tip.hidden = false; });
+  document.addEventListener("mousemove", function (e) { if (tip.hidden) return; tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 270) + "px"; tip.style.top = (e.clientY + 14) + "px"; });
+  document.addEventListener("mouseout", function (e) { if (e.target.closest && e.target.closest("[data-tip]")) tip.hidden = true; });
+})();
+</script>
