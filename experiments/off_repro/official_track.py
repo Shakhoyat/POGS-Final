@@ -28,7 +28,8 @@ from experiments.off_repro.official_sweeps import FR, OUT, ns_camera, setup  # n
 
 SEQ = os.path.expanduser("~/pogs_external/off/sequences")
 PROBE = os.environ.get("OFF_PROBE", "0") == "1"
-ROI_INIT = os.environ.get("OFF_ROI_INIT", "0") == "1"   # OR5 variant (docs/note/off_or5_roi_init_preregistration.md)
+ROI_INIT = os.environ.get("OFF_ROI_INIT", "0") == "1"
+FULL = os.environ.get("OFF_FULL", "0") == "1"           # OR6: whole trials (docs/note/off_or6_recovery_preregistration.md)   # OR5 variant (docs/note/off_or5_roi_init_preregistration.md)
 
 
 def roi_initialize(opt, rgb, depth, cam, dino_fn):
@@ -107,7 +108,8 @@ def run(config: str) -> None:
     c0 = np.asarray(info["centroid"], float)
     axis = np.r_[1.0, 0, 0]
     out = []
-    files = sorted(glob.glob(os.path.join(SEQ, "grasp_*.npz")))
+    files = sorted(glob.glob(os.path.join(os.path.expanduser("~/pogs_external/off/sequences_full") if FULL else SEQ,
+                                          "grasp_*.npz")))
     if ROI_INIT:
         files = [f for f in files if os.path.basename(f) in {f"grasp_+15_s{i}.npz" for i in range(5)}]
     for p in files:
@@ -136,6 +138,8 @@ def run(config: str) -> None:
             roll, swing = _swing_twist(G[:3, :3].T @ P[:3, :3], axis)
             row = dict(frame=int(z["frame"][k]), phase=str(z["phase"][k]), roll=roll, swing=swing,
                        trans_err_cm=float(np.linalg.norm(P[:3, 3] - G[:3, 3]) * 100))
+            if FULL:
+                row.update(pred_T=np.round(P, 7).tolist(), gt_T=np.round(G, 7).tolist())
             if PROBE and k > 0:          # 8.OFF-P (exploratory): official loss at the estimate vs at the GT pose
                 from scipy.spatial.transform import Rotation
                 qg = Rotation.from_matrix(G[:3, :3]).as_quat()            # xyzw
@@ -146,13 +150,21 @@ def run(config: str) -> None:
                     lg = opt.get_optim_loss(opt.frame, dg, True, False, False, False, False, False, True)[0]
                 row.update(loss_est=float(le), loss_gt=float(lg))
             rows.append(row)
+        if FULL:
+            print(f"[or6] {name}: {len(rows)} frames, final roll {rows[-1]['roll']:+.1f} trans "
+                  f"{rows[-1]['trans_err_cm']:.2f} cm", flush=True)
+            out.append(dict(case=name, rows=rows))
+            opt.reset_transforms()
+            json.dump({"setup": info, "config": config, "cases": out},
+                      open(os.path.join(OUT, "official_track_full.json"), "w"))
+            continue
         last_app = [r for r in rows if r["phase"] == "approach"][-1]
         print(f"[or4] {name}: last approach frame {last_app['frame']} roll {last_app['roll']:+.1f} swing "
               f"{last_app['swing']:.1f} trans {last_app['trans_err_cm']:.2f} cm", flush=True)
         out.append(dict(case=name, rows=rows))
         opt.reset_transforms()
     json.dump({"setup": info, "config": config, "cases": out},
-              open(os.path.join(OUT, "official_track_or5.json" if ROI_INIT else
+              open(os.path.join(OUT, "official_track_full.json" if FULL else "official_track_or5.json" if ROI_INIT else
                                 "official_track_probe.json" if PROBE else "official_track.json"), "w"))
 
 

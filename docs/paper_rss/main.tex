@@ -221,7 +221,9 @@ An exploratory swap locates the difference: our tracking code on the official sp
 dose-response, and $-10.5^\circ$ on our splat. The two tracking objectives agree; the trained splats differ. At the
 tracking camera our drill groups cover 730--1100 rendered pixels outside the true silhouette, the official one 330,
 and our semi-transparent fringe is 3--4 times larger; across the four splats this over-coverage ranks with the bias
-(exploratory, $n=4$). The implicit silhouette term is present in both pipelines; a static, shadow-driven minimum
+(exploratory, $n=4$). A pre-registered pruning of the Gaussians whose centres fall outside the true silhouette
+removed only about 30\% of the over-coverage and left the offset ($-7.5$, $-10.5$, $-7.5^\circ$; fail), so
+over-coverage remains a correlate, not a demonstrated cause. The implicit silhouette term is present in both pipelines; a static, shadow-driven minimum
 arises when the object group's silhouette spills onto the background. The official tracker's roll error (Sec.~IV) is
 instead a frame-by-frame drift, whose cause we are testing.
 

@@ -84,3 +84,33 @@ def sequences(phases=("approach", "lift")) -> None:
 
 if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] == "sequences":
     sequences()
+
+
+FULL_OUT = os.path.expanduser("~/pogs_external/off/sequences_full")
+OR6_CASES = [f"grasp_{a}_s{s}" for a in ("+15", "-15", "+30", "-30") for s in range(10)]
+
+
+def sequences_full() -> None:
+    """OR6 inputs: every frame of 40 O4 trials, as our tracker sees them, plus drill GT motion (evaluation only)."""
+    from data.scene_generator.pick_place_benchmark import load_sequence
+    from data.scene_generator.tool_perturbation import TOOL_DATASET_DIR
+    os.makedirs(FULL_OUT, exist_ok=True)
+    for name in OR6_CASES:
+        out = os.path.join(FULL_OUT, f"{name}.npz")
+        if os.path.exists(out):
+            continue
+        seq = load_sequence(TOOL_DATASET_DIR, name, lazy=True)
+        idx = list(range(len(seq.meta["frames"])))
+        rgb = np.stack([(seq.frames[i].rgb.numpy() * 255).round().astype(np.uint8) for i in idx])
+        depth = np.stack([np.asarray(seq.frames[i].depth, np.float32) for i in idx])
+        gt = np.stack([seq.frames[i].gt_delta.get(DRILL_ID, np.eye(4)) for i in idx])
+        c = seq.camera
+        np.savez_compressed(out, rgb=rgb, depth=depth, gt_delta=gt, frame=np.array(idx),
+                            phase=np.array([fm["phase"] for fm in seq.meta["frames"]]),
+                            c2w_cv=c.c2w.cpu().numpy(), K=np.array([[c.fx, 0, c.cx], [0, c.fy, c.cy], [0, 0, 1]], float),
+                            width=c.width, height=c.height)
+        print(f"{name}: {len(idx)} frames", flush=True)
+
+
+if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] == "sequences_full":
+    sequences_full()

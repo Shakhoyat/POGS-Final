@@ -182,7 +182,7 @@ def summarise() -> None:
           f" ({'pass' if or1 else 'FAIL'}, rule <= -5) | data_results/off_repro/summary.md")
     print(f"FINDING: OR2 | official loss shadow dose-response rho {rho:+.2f}, shift {shift:+.1f} deg "
           f"({'pass' if or2 else 'FAIL'}) | data_results/off_repro/summary.md")
-    print(f"FINDING: OR3 | official vs re-implementation argmins: rho {rho3:+.2f}, median |diff| {mad:.1f} deg "
+    print(f"FINDING: OR3 | official vs re-implementation argmins: rho {rho3:+.2f}, median abs diff {mad:.1f} deg "
           f"({'pass' if or3 else 'FAIL'}) | data_results/off_repro/summary.md")
 
 
