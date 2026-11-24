@@ -163,7 +163,9 @@ across views and lighting, before attributing an error to observability. A refer
 (\texttt{metrics/recovery\_report.py}) produces all of these in one call.
 
 \section{Limitations}
-Simulation, one procedural drill, one lighting model; real cameras add exposure changes. The paired $\pm$
+Simulation with one lighting model; real cameras add exposure changes. The dose-response is measured on the drill
+only (three splats of one scene); the other objects enter only the stiffness tests. G2 evaluates RSRD's objective in
+our framework, not the RSRD code. Why tracking fails without the background term is not explained by static sweeps. The paired $\pm$
 asymmetry is not explained by the mechanism alone. A shadow-free explicit silhouette (depth foreground with
 gripper exclusion) is pre-registered but not run.
 
