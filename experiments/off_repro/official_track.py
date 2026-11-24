@@ -108,13 +108,20 @@ def run(config: str) -> None:
     c0 = np.asarray(info["centroid"], float)
     axis = np.r_[1.0, 0, 0]
     out = []
+    done = set()
+    if FULL and os.path.exists(os.path.join(OUT, "official_track_full.json")):     # resume after a lab-hours pause
+        out = json.load(open(os.path.join(OUT, "official_track_full.json")))["cases"]
+        done = {c["case"] for c in out}
+        print(f"resuming: {len(done)} trials already done", flush=True)
     files = sorted(glob.glob(os.path.join(os.path.expanduser("~/pogs_external/off/sequences_full") if FULL else SEQ,
                                           "grasp_*.npz")))
     if ROI_INIT:
         files = [f for f in files if os.path.basename(f) in {f"grasp_+15_s{i}.npz" for i in range(5)}]
     for p in files:
-        z = np.load(p)
         name = os.path.splitext(os.path.basename(p))[0]
+        if name in done:
+            continue
+        z = np.load(p)
         cam = ns_camera(z["c2w_cv"], z["K"], z["width"], z["height"], info["dataset_scale"])
         opt = RigidGroupOptimizer(RigidGroupOptimizerConfig(), model, group_masks=opt0.group_masks,
                                   group_labels=opt0.group_labels, dataset_scale=info["dataset_scale"])
