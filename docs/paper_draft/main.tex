@@ -1,6 +1,6 @@
 \documentclass[conference]{IEEEtran}
 % Draft, 2026-11-24. Simulation only. Numbers come from the result files named in docs/note/analysis_note_draft.md.
-% Sections marked \pending are filled from pre-registered steps G1/G2 when they finish.
+% Sections marked \pending are filled from pre-registered steps G1b/G2 when they finish.
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{amsmath,amssymb}
@@ -98,15 +98,36 @@ shadow, $-6^\circ$ without the gripper and $-2^\circ$ with shadows off. (iv) Rem
 trajectories: DINO inside the per-pose mask tracks 1/0/4/4 of 25 vs.\ 9/12/16/23 for POGS; switching DINO off
 (depth only) gives 0 everywhere. Static sweeps do not show the background supplying the local rotational
 stiffness (Sec.~\ref{sec:g1}); the masked variants fail through translation drift in the lift.
-\textbf{Dose-response.} Scaling the cast-shadow strength $s$ of the tracking frame moves the minimum monotonically
-(seed-0 splat: $-2.5^\circ$ at $s=0$, $-7.5$, $-8.5$, $-8.5$, $-10.5$ at $s=1$, $-10.5$ at $s=1.25$), while the
-same loss with a rendered background stays at $+2.5$ to $+4^\circ$. \pending{seeds 1, 2; P4/P5; figure}
+\textbf{Dose-response.} Scaling the cast-shadow strength $s$ of the tracking frame (gripper at its frame-0 pose)
+moves the roll minimum monotonically on all three independently trained splats (Fig.~\ref{fig:dose}; Spearman
+$\rho=-0.97,-0.85,-0.85$; shift from $s=0$ to $s=1$ of $-8.0^\circ$, $-9.0^\circ$, $-5.0^\circ$). The same loss with a
+rendered background moves by $0.5$--$1.5^\circ$ and stays at $+2$ to $+4^\circ$. Both pre-registered rules (P4, P5) pass.
+\begin{figure}[t]\centering\includegraphics[width=\linewidth]{figs/dose_response.pdf}
+\caption{Dose-response: roll at the minimum of the DINO loss vs.\ cast-shadow strength, drill at the true pose,
+three splats (markers). Only the tracking frame is re-rendered; the splats were trained at $s=1$.}\label{fig:dose}
+\end{figure}
 \begin{figure}[t]\centering\includegraphics[width=\linewidth]{\figdir/finding_argmin.pdf}
 \caption{Roll argmin of each loss term at the true pose.}\label{fig:argmin}\end{figure}
 
 \section{Generality}\label{sec:g1}
-\pending{G1, pre-registered (\nolinkurl{docs/note/g1_generality_preregistration.md}): background share of the
-restoring curvature for drill, mug, mustard bottle and cereal box on three independently trained splats; P1--P3.}
+We pre-registered five predictions (\nolinkurl{docs/note/g1_generality_preregistration.md}) before any sweep: three
+splats of the tool scene trained with different seeds; four objects (drill, mug, mustard bottle, cereal box);
+the tracking camera with and without shadows and 12 held-out views; rotations about three axes. Results, in the
+order fixed in advance:
+\begin{table}[t]\centering\caption{Pre-registered generality results (static sweeps).}\label{tab:g1}
+\small\begin{tabular}{@{}p{0.6\linewidth}p{0.33\linewidth}@{}}\toprule Prediction & Result\\\midrule
+P1: background carries $>50\%$ of the local rotational curvature ($\geq3$/4 objects; drill on new splats) & fail (2/4; drill 0.10, 0.17, 0.27)\\
+P2: drill roll bias $\leq-5^\circ$ replicates on new splats & pass ($-10, -10, -5^\circ$)\\
+P3: rendered background lowers mean $|$argmin$|$ on held-out views ($\geq3$/4) & fail (2/4)\\
+P4: monotone shadow dose-response ($\geq2$/3 splats) & pass (3/3)\\
+P5: rendered background moves $<$ half as much ($\geq2$/3) & pass (3/3)\\\bottomrule
+\end{tabular}\end{table}
+The bias and its dependence on shadow replicate across splats (P2, P4, P5). The stronger claim we started with, that
+the background term supplies most of the restoring force, does not hold for rotation: near the truth the object's
+own features give most of the curvature (P1), and the rotational basins are about $\pm20^\circ$ wide with or without
+the background term. A caveat on P1: the split $S_\text{in}+S_\text{out}$ uses the mask at the evaluated pose, so
+pixels crossing the silhouette are counted inside; it is not a clean causal split. \pending{G1b: translational
+stiffness, pre-registered after reading P1.}
 \subsection{A second tracker: the RSRD objective}\label{sec:g2}
 RSRD~\cite{kerr2024rsrd} builds its DINO loss the same way (object-only render, sharp inside the mask and blurred
 outside, averaged over the ROI) and adds an RGB L1 term over the ROI, also against the object-only render.
