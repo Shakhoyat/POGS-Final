@@ -10,6 +10,17 @@ background vs a zero render), and that term is what lighting, shadows and viewpo
 ground truth exact (B0) → object features unbiased (B1e) → the background does the work (masking it collapses
 recovery: 1/0/4/4 vs 9/12/16/23) → the DINO term matters (depth only: 0 everywhere).
 
+**Correction 2026-11-24 (G1, pre-registered; seed-0 splat).** The static sweeps do not support "the background
+supplies most of the restoring force" for rotation. P1 fails on seed 0 (median background share of the rotational
+curvature > 0.5 for 2 of 4 objects; drill 0.10) and P3 fails (2 of 4). Exploratory: the object's own features give
+0.60–0.89 of the local rotational curvature, and the rotational basins are ±20° wide whatever the background
+treatment. What survives, and is stronger than before, is the **bias**: the roll minimum follows the cast-shadow
+strength (seed 0: −2.5° at no shadow → −10.5° at default, Spearman −0.97), while the same loss against a rendered
+background moves by 1.5°. The trajectory collapse of the masked variants (1/0/4/4) is a translation drift in the
+lift; whether the background carries the translational stiffness is tested by G1b (pre-registered). Until then the
+claim is: **the implicit silhouette term biases the minimum with shadows and viewpoint; tracking without it fails in
+trajectories; the static mechanism for that failure is open.**
+
 ## Thesis in three sentences
 1. The POGS drill result (48/50 at ≤ 15°, 40/50 at 30°) uses a rule that leaves roll about the bit axis free
    (Sec. V-B). Under that rule our re-implementation matches the 30° tier in one direction (+30°: 39/50 vs
@@ -86,7 +97,8 @@ left open. Caveat: depth-only and masked runs lose the drill, so their medians p
 
 ## 5b. Mechanism (B1e/B1f)
 87% of the ROI is background. There the release loss compares live features with a zero render, which acts as an
-implicit silhouette term. That term supplies the roll restoring force, and the cast shadow and viewpoint bias it
+implicit silhouette term. (Superseded 2026-11-24 for rotation, see the correction at the top: the term biases the roll
+minimum; it does not supply most of the local rotational stiffness.) The cast shadow and viewpoint bias it
 (−10° at the tracking camera). Inside the drill the features are unbiased at the truth but nearly flat within
 ±10°.
 

@@ -23,9 +23,9 @@ with exact ground truth and find two things. First, the published recovery rule 
 free, and it hides a systematic roll error of $9.5 \pm 2.8^\circ$ that is present before any perturbation; under a full
 rotation rule recovery falls from 17--39 to 2--14 of 50 trials. Second, the error is not an optimisation failure.
 The loss prefers the wrong pose on 87--100\% of frames, because the feature loss averaged over the region of
-interest compares background pixels with an empty render. This acts as an implicit silhouette term. It supplies
-most of the restoring force, and cast shadows and viewpoint bias it: the roll minimum moves from $-2.5^\circ$ to
-$-10.5^\circ$ as the gripper's shadow is strengthened. Six corrections, including stronger depth, newer backbones,
+interest compares background pixels with an empty render. This acts as an implicit silhouette term, and cast shadows and viewpoint bias it: the roll minimum moves from
+$-2.5^\circ$ to $-10.5^\circ$ as the gripper's shadow is strengthened, while the same loss against a rendered
+background moves by $1.5^\circ$. \pending{G1b: translational stiffness} Six corrections, including stronger depth, newer backbones,
 feature upsampling and a rendered background, all fail a criterion fixed in advance. We give a pre-registered test
 of generality across splats and objects and a set of evaluation rules: report both rules, score a no-motion
 baseline, and decompose roll from swing.
@@ -43,7 +43,7 @@ We set out to reproduce this result and to understand what limits it. Our contri
 paper's $30^\circ$ tier in one direction ($39$ vs.\ $40$ of 50, Fisher $p=1.0$); under a full rotation rule recovery
 collapses, and a relative ``back to pre-perturbation error'' rule is passed by a tracker that does not move.
 \item \textbf{A mechanism.} The ROI-averaged feature loss contains an implicit silhouette term (background vs.\
-an empty render). It provides the restoring force and carries a shadow- and viewpoint-dependent bias
+an empty render) that carries a shadow- and viewpoint-dependent bias
 (Sec.~\ref{sec:mechanism}). This links feature-field trackers to region-based silhouette trackers, for which
 sensitivity to shadows and background is well known~\cite{prisacariu2012pwp3d,stoiber2022srt3d}.
 \item \textbf{Negative results with a fixed criterion}: six corrections, none passes (Sec.~\ref{sec:fixes}).
@@ -94,9 +94,10 @@ silhouette leaves uncovered: a silhouette term. In the drill ROI 87\% of pixels 
 \textbf{Evidence.} (i) The ground truth is exact: RGB-only argmins are at $0.0^\circ$ in every rotation. (ii) The
 features inside the drill are unbiased: restricted to the true-pose mask, the DINO minimum is within $1^\circ$ of
 the truth in all 16 views. (iii) The full-ROI minimum sits at $-10^\circ$ at the tracking camera with the gripper's
-shadow, $-6^\circ$ without the gripper and $-2^\circ$ with shadows off. (iv) Removing the background removes the
-restoring force: DINO inside the per-pose mask tracks 1/0/4/4 of 25 vs.\ 9/12/16/23 for POGS; switching DINO off
-(depth only) gives 0 everywhere.
+shadow, $-6^\circ$ without the gripper and $-2^\circ$ with shadows off. (iv) Removing the background breaks tracking in
+trajectories: DINO inside the per-pose mask tracks 1/0/4/4 of 25 vs.\ 9/12/16/23 for POGS; switching DINO off
+(depth only) gives 0 everywhere. Static sweeps do not show the background supplying the local rotational
+stiffness (Sec.~\ref{sec:g1}); the masked variants fail through translation drift in the lift.
 \textbf{Dose-response.} Scaling the cast-shadow strength $s$ of the tracking frame moves the minimum monotonically
 (seed-0 splat: $-2.5^\circ$ at $s=0$, $-7.5$, $-8.5$, $-8.5$, $-10.5$ at $s=1$, $-10.5$ at $s=1.25$), while the
 same loss with a rendered background stays at $+2.5$ to $+4^\circ$. \pending{seeds 1, 2; P4/P5; figure}
