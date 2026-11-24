@@ -118,9 +118,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016TFSbkPUR4K1RftUUD3u9R
 EOF
   fi
-  git fetch -q origin
+  # Credentials come from the VS Code askpass helper; with no IDE attached it blocks, so bound every network call.
+  export GIT_TERMINAL_PROMPT=0
+  timeout 60 git fetch -q origin || { echo "sync: fetch failed/timed out (no credentials?), committed locally only"; return 0; }
   if ! git merge-base --is-ancestor "origin/$BRANCH" HEAD; then git merge -q --no-edit "origin/$BRANCH" || { echo "sync: merge conflict, not pushed"; return 1; }; fi
-  git push -q origin "$BRANCH" && echo "sync: pushed $(git rev-parse --short HEAD)"
+  if timeout 90 git push -q origin "$BRANCH"; then echo "sync: pushed $(git rev-parse --short HEAD)";
+  else echo "sync: push failed/timed out (VS Code askpass not answering?); $(git rev-list --count origin/$BRANCH..HEAD) commit(s) local only"; fi
 }
 
 loop() {
