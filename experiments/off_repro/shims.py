@@ -5,7 +5,7 @@ docs/note/off_reproduction_preregistration.md). Import this module before anythi
   official `pogs.data.utils.detic_dataloader` module imports unchanged; its `load()` then reads the Detic cache that
   `experiments/off_repro/export.py` wrote from the simulator masks. If the cache were missing, the official
   `create()` would call a stub and fail loudly (never silently produce masks).
-- cuML is replaced by scikit-learn with the official call arguments: `HDBSCAN(cluster_selection_epsilon,
+- If cuML is not importable, it is replaced by scikit-learn with the official call arguments: `HDBSCAN(cluster_selection_epsilon,
   min_samples, min_cluster_size, allow_single_cluster)` and `NearestNeighbors(n_neighbors, algorithm, metric)`.
 - tiny-cuda-nn does not build with CUDA 13.0 nvcc (internal compiler errors, 2026-11-25). If `import tinycudann`
   fails, `tinycudann.Encoding(HashGrid)` and `tinycudann.Network` are replaced by nerfstudio's pure-torch
@@ -122,10 +122,27 @@ def _install_tcnn():
     sys.modules["tinycudann"] = m
 
 
+def _allow_numpy_in_checkpoints():
+    """nerfstudio 1.1.5 calls torch.load without weights_only (torch 2.0 era); torch >= 2.6 defaults to the safe
+    loader, which rejects the numpy scalars our own freshly trained checkpoints contain. Allow-list only numpy scalar
+    and dtype types; the safe loader stays on."""
+    try:
+        import numpy as np
+        import torch
+        allow = [np.core.multiarray.scalar, np.dtype]
+        allow += [getattr(np.dtypes, n) for n in dir(np.dtypes) if n.endswith("DType")]
+        torch.serialization.add_safe_globals(allow)
+    except Exception:
+        pass
+
+
 def install():
+    _allow_numpy_in_checkpoints()
     if not any(isinstance(f, _StubFinder) for f in sys.meta_path):
         sys.meta_path.insert(0, _StubFinder())
-    if "cuml" not in sys.modules:
+    try:                       # real cuML (installed 2026-11-25: cuml-cu13 25.10) -> official clustering, no stand-in
+        import cuml  # noqa: F401
+    except Exception:
         _install_cuml()
     _install_tcnn()
 

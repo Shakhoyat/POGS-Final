@@ -20,6 +20,9 @@ from experiments.off_repro import shims  # noqa: E402,F401
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
+import warp as wp  # noqa: E402
+
+wp.init()  # as track_main_online_demo.py
 
 from experiments.off_repro.official_sweeps import FR, OUT, ns_camera, setup  # noqa: E402
 
@@ -57,8 +60,8 @@ def _pose_from_deltas(d, c0):
 
 
 def run(config: str) -> None:
-    from pogs.tracking.observation import Frame, PosedObservation
     from pogs.tracking.rigid_group_optimizer import RigidGroupOptimizer, RigidGroupOptimizerConfig
+    from pogs.tracking.observation import Frame, PosedObservation
     os.makedirs(OUT, exist_ok=True)
     os.chdir(os.path.expanduser("~/pogs_external/off"))
     idx = json.load(open(os.path.join(FR, "index.json")))
@@ -77,7 +80,7 @@ def run(config: str) -> None:
         rows = []
         for k in range(len(z["frame"])):
             rgb = torch.from_numpy(z["rgb"][k]).float().cuda() / 255.0
-            depth = torch.from_numpy(z["depth"][k]).float().cuda()[..., None]
+            depth = torch.from_numpy(z["depth"][k]).float().cuda()          # (H, W): official Frame adds the channel
             if k == 0:
                 opt.set_frame(Frame(rgb=rgb, camera=cam.to("cuda"), dino_fn=dino_fn, metric_depth_img=depth))
                 opt.initialize_obj_pose(niter=100, n_seeds=7)

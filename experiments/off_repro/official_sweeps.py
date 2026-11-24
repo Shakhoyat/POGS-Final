@@ -23,6 +23,9 @@ from experiments.off_repro import shims  # noqa: E402,F401
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
+import warp as wp  # noqa: E402
+
+wp.init()  # as track_main_online_demo.py
 
 FR = os.path.expanduser("~/pogs_external/off/frames")
 OUT = os.path.join(ROOT, "data_results/off_repro")
@@ -58,7 +61,8 @@ def setup(config: str, click, table_z: float, eps: float = 0.012):
     info = {"n_clusters": int(labels.max()) + 1, "vote": vote, "n_keep": int(len(keep)),
             "n_gaussians": int(means.shape[0])}
     # Optimizer._cluster_from_file
-    pipeline._queue_state()
+    import copy  # pipeline._queue_state() without its viewer-button side effect (no viewer here)
+    pipeline.state_stack.append(copy.deepcopy({k: v.detach() for k, v in model.gauss_params.items()}))
     prev = pipeline.state_stack[-1]
     for name in model.gauss_params.keys():
         model.gauss_params[name] = prev[name][keep]
@@ -98,6 +102,7 @@ def roll_deltas(deg):
 
 
 def run(config: str) -> None:
+    import pogs.tracking.rigid_group_optimizer  # noqa: F401  (official import order; observation <-> utils2 cycle)
     from pogs.tracking.observation import PosedObservation
     os.makedirs(OUT, exist_ok=True)
     os.chdir(os.path.expanduser("~/pogs_external/off"))  # official caches: ./outputs/<data name> (as in training)

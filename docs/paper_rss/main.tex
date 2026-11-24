@@ -34,7 +34,10 @@ pre-registered test shows that this term predicts the sign of the bias in all 48
 rank across 60 (Spearman 0.80), mostly through how much background a rotation uncovers rather than where the shadow
 lies. On three independently trained splats the roll minimum
 follows the gripper's shadow strength (Spearman $\rho\le-0.85$, shifts of 5--9$^\circ$), a rendered background removes
-the dependence, and the objective of a second tracker (RSRD) shows the same bias. Pre-registered tests refute our own
+the dependence, and the objective of a second tracker (RSRD) shows the same bias. The official POGS code, trained and
+evaluated on the same capture, does not show the large bias ($+2^\circ$; pre-registered test failed); swapping splats
+between the two pipelines places the difference in how the splat is trained, not in the tracking objective, so the
+bias's magnitude depends on the trained splat. Pre-registered tests refute our own
 first explanation, that the term supplies the restoring force, and six corrections fail a criterion fixed in
 advance. We propose evaluation rules with a reference implementation, and an extension plan: the official code, real
 captures with a controlled lamp, and an explicit shadow-free silhouette term.
@@ -195,6 +198,16 @@ the object-only render. Its objective, evaluated with our splats and renderer (p
 roll minimum with the gripper's shadow at $-10^\circ$, the same as POGS. RSRD and POGS share code lineage, so this
 tests the objective family, not an independent implementation.
 
+\textbf{The official code (pre-registered).} We trained the official POGS release on the same capture (official
+method configuration; documented environment deviations: Python 3.10 with a newer torch/CUDA, simulator masks in
+place of Detic, a pure-torch stand-in for the grouping heads' hash-grid library) and evaluated its tracking loss on
+the same frames. The large bias does not reproduce: with the gripper's shadow the official loss has its roll minimum
+at $+2^\circ$ (rule $\le-5^\circ$; fail), and its minimum does not follow the shadow strength ($\rho=0.00$; fail).
+Across the 13 views without the gripper the two pipelines agree (Spearman 0.53, median difference $2^\circ$; pass).
+An exploratory swap locates the difference: our tracking code on the official splat gives $-1.5^\circ$ with no
+dose-response, and $-10.5^\circ$ on our splat. The two tracking objectives agree; the trained splats differ. The
+implicit silhouette term is present in both, but how strongly it biases the pose depends on the splat.
+
 \section{H4 refuted, and six corrections that fail}\label{sec:fixes}
 \textbf{H4.} Removing the background breaks tracking: DINO restricted to the per-pose object mask recovers 1/0/4/4 of
 25 trials vs.\ 9/12/16/23 for POGS. We expected the background to supply the restoring force. Three pre-registered
@@ -231,10 +244,10 @@ produces all four in one call and will be released.
 
 \section{Planned extensions (proposed Extension Charter)}
 Each extension has a written protocol with pass rules fixed before data is seen.
-\textbf{E1: official code.} Train and track with the official POGS code on the same capture and repeat the roll and
-dose-response sweeps (OR1: roll minimum $\le-5^\circ$ with the gripper's shadow; OR2: $\rho\le-0.8$ and a shift
-$\ge4^\circ$; OR3: agreement with our implementation across 13 views). A failure narrows the claim to our
-implementation and will be reported as such.
+\textbf{E1: which property of a splat sets the bias.} The official-code check (Sec.~\ref{sec:g1}) shows that the
+splat, not the objective, sets the magnitude. We will identify the property (rendered silhouette accuracy and halo of
+the object group, per-Gaussian feature fit) and test whether it predicts the bias across splats from both pipelines
+and several seeds.
 \textbf{E2: real captures.} A drill on an AprilTag board scanned under diffuse light; test frames at three tripod
 viewpoints with one lamp at controlled positions and intensities and an occluder that casts a shadow into the ROI.
 The drill never moves, so the scan pose is the ground truth. Predictions: R1 roll minimum $\le-5^\circ$ (same sign as in
