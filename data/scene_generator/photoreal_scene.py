@@ -386,8 +386,11 @@ def render_photoreal_scene(
     fill_light: Tuple[float, float, float] = (-0.50, 0.20, 0.60),
     cast_shadows: bool = True,
     supersample: int = 1,
+    shadow_strength: float = 1.0,
 ) -> Dict[str, torch.Tensor]:
-    """Renders physically-plausible RGB with ray-traced shadows and specular highlights."""
+    """Renders physically-plausible RGB with ray-traced shadows and specular highlights.
+    ``shadow_strength`` scales the cast-shadow darkening: shadow factor = 1 - s * (1 - 0.22); 1 = default
+    (factor 0.22), 0 = no darkening (G1-S dose-response, `docs/note/g1_generality_preregistration.md`)."""
     from .scene_builder import _ray_dirs, _intersect_batch, FlatScene
 
     H, W = camera.height, camera.width
@@ -448,7 +451,8 @@ def render_photoreal_scene(
             in_sh = (t_min_sh > 1e-4) & (t_min_sh < 1e5)
             all_sh.append(in_sh)
         is_shadowed = torch.cat(all_sh, dim=0)
-        shadow_factor = torch.where(is_shadowed, torch.tensor(0.22, device=dev), torch.tensor(1.0, device=dev))
+        shadow_factor = torch.where(is_shadowed, torch.tensor(1.0 - shadow_strength * (1.0 - 0.22), device=dev),
+                                    torch.tensor(1.0, device=dev))
 
     # 2. Secondary Soft Fill Light (Simulating ambient bounce)
     L_fill = torch.tensor(fill_light, dtype=torch.float32, device=dev)
