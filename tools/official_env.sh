@@ -10,7 +10,7 @@ OFF=$HOME/third_party_pinned/POGS-official
 V=$HOME/venvs/pogs-official
 PY=$V/bin/python
 cd "$ROOT"
-[ -x "$PY" ] || uv venv -q --python 3.12 "$V"
+[ -x "$PY" ] || uv venv -q --python 3.10 "$V"   # official: Python 3.10 (3.12 rejects a dataclass default in pogs)
 export VIRTUAL_ENV=$V
 uvp() { uv pip install --python "$PY" "$@"; }
 echo "== torch"; uvp -q "torch==2.14.1+cu130" "torchvision==0.29.1+cu130" --index-url https://download.pytorch.org/whl/cu130
@@ -20,7 +20,7 @@ export CUDA_HOME=$SP/nvidia/cu13
 ln -sfn lib "$CUDA_HOME/lib64"; ln -sf libcudart.so.13 "$CUDA_HOME/lib/libcudart.so"
 export PATH=$V/bin:$CUDA_HOME/bin:$PATH
 PYINC=$($PY -c 'import sysconfig;print(sysconfig.get_paths()["include"])')
-[ -f "$PYINC/Python.h" ] && export CPATH=$PYINC || export CPATH="$ROOT/.venv/sysinclude/usr/include/python3.12:$ROOT/.venv/sysinclude/usr/include"
+[ -f "$PYINC/Python.h" ] && export CPATH=$PYINC
 export TORCH_CUDA_ARCH_LIST=8.9 TCNN_CUDA_ARCHITECTURES=89 MAX_JOBS=16
 # glibc >= 2.41 declares rsqrt/rsqrtf noexcept; CUDA 13.0's crt/math_functions.h does not -> nvcc error in tcnn.
 H=$CUDA_HOME/include/crt/math_functions.h
@@ -30,7 +30,7 @@ echo "== gsplat, warp, extras"; uvp -q "gsplat==1.5.3" warp-lang jaxtyping rich 
 echo "== pogs (official, editable)"; uvp -q -e "$OFF"
 echo "== gsplat CUDA JIT"; $PY -c "from gsplat.cuda._backend import _C; assert _C is not None; print('gsplat OK')"
 echo "== tiny-cuda-nn (bindings/torch, build from source)"
-if ! $PY -c "import tinycudann" 2>/dev/null; then
+if [ "${SKIP_TCNN:-1}" != "1" ] && ! $PY -c "import tinycudann" 2>/dev/null; then   # default: skip (nvcc 13 ICE; stand-in in shims)
   [ -d "$HOME/third_party_pinned/tiny-cuda-nn" ] || git clone -q --recursive https://github.com/NVlabs/tiny-cuda-nn "$HOME/third_party_pinned/tiny-cuda-nn"
   # torch 2.14 headers require C++20; tcnn's setup.py pins C++17 for CUDA >= 11 (build flag only)
   sed -i.orig 's/^cpp_standard = 17$/cpp_standard = 20/; s/\t\t\tcpp_standard = 17$/\t\t\tcpp_standard = 20/' "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch/setup.py"
@@ -41,8 +41,8 @@ s=s.replace('\t"-U__CUDA_NO_HALF2_OPERATORS__",\n]','\t"-U__CUDA_NO_HALF2_OPERAT
 s=s.replace('\tbase_cflags = [f"-std=c++{cpp_standard}"]','\tbase_cflags = [f"-std=c++{cpp_standard}", "-DFMT_CONSTEVAL="]')
 open(p,'w').write(s)
 PYEOF
-  ( cd "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch" && uvp --no-build-isolation . )
+  ( cd "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch" && uvp --no-build-isolation . ) || true
 fi
-$PY -c "import tinycudann, torch; print('tcnn OK', torch.__version__)"
-echo "== import check"; $PY -c "import nerfstudio, pogs.pogs, pogs.tracking.rigid_group_optimizer as r; print('official POGS imports OK')"
+$PY -c "import tinycudann" 2>/dev/null && echo "tcnn OK" || echo "tcnn NOT built: experiments/off_repro/shims.py uses the pure-torch stand-in (deviation 5)"
+echo "== import check (with shims)"; ( cd "$ROOT" && $PY -c "import experiments.off_repro.shims, nerfstudio, pogs.pogs, pogs.tracking.rigid_group_optimizer as r; print('official POGS imports OK')" )
 echo "ENV_DONE"

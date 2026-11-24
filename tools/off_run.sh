@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 OPY=$HOME/venvs/pogs-official/bin/python
 W=$HOME/pogs_external/off
-$OPY -c "import tinycudann, pogs.pogs" 2>/dev/null || { echo "official env not ready"; exit 1; }
+( cd "$ROOT" && $OPY -c "import experiments.off_repro.shims, pogs.pogs" ) >/dev/null 2>&1 || { echo "official env not ready"; exit 1; }
 CFG=$(ls -t $W/runs/tool_table_ns/pogs/*/config.yml 2>/dev/null | head -1 || true)
 if [ -z "$CFG" ] || [ ! -f "$W/train.done" ]; then
   echo "== official training"

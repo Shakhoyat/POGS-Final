@@ -7,6 +7,11 @@ docs/note/off_reproduction_preregistration.md). Import this module before anythi
   `create()` would call a stub and fail loudly (never silently produce masks).
 - cuML is replaced by scikit-learn with the official call arguments: `HDBSCAN(cluster_selection_epsilon,
   min_samples, min_cluster_size, allow_single_cluster)` and `NearestNeighbors(n_neighbors, algorithm, metric)`.
+- tiny-cuda-nn does not build with CUDA 13.0 nvcc (internal compiler errors, 2026-11-25). If `import tinycudann`
+  fails, `tinycudann.Encoding(HashGrid)` and `tinycudann.Network` are replaced by nerfstudio's pure-torch
+  `HashEncoding` and a bias-free ReLU MLP of the same width/depth (CutlassMLP has no biases). In POGS these feed only
+  the CLIP and instance (grouping) heads, not the DINO features or geometry the tracker uses (pre-registered
+  deviation 5).
 No official source file is modified.
 """
 import importlib.abc
@@ -70,11 +75,59 @@ def _install_cuml():
                         "cuml.neighbors": neighbors})
 
 
+def _install_tcnn():
+    try:
+        import tinycudann  # noqa: F401
+        return
+    except Exception:
+        pass
+    import torch
+    from torch import nn
+
+    class Encoding(nn.Module):
+        def __init__(self, n_input_dims, encoding_config, dtype=None):
+            super().__init__()
+            from nerfstudio.field_components.encodings import HashEncoding
+            c = encoding_config
+            assert c.get("otype") == "HashGrid", c
+            L, base, scale = int(c["n_levels"]), float(c["base_resolution"]), float(c["per_level_scale"])
+            self.enc = HashEncoding(num_levels=L, min_res=int(base), max_res=int(round(base * scale ** (L - 1))),
+                                    log2_hashmap_size=int(c["log2_hashmap_size"]),
+                                    features_per_level=int(c["n_features_per_level"]), implementation="torch")
+            self.n_input_dims, self.n_output_dims = n_input_dims, self.enc.get_out_dim()
+
+        def forward(self, x):
+            return self.enc(x)
+
+    class Network(nn.Module):
+        def __init__(self, n_input_dims, n_output_dims, network_config, seed=1337):
+            super().__init__()
+            c = network_config
+            assert c.get("activation", "ReLU") == "ReLU" and c.get("output_activation", "None") == "None", c
+            w, h = int(c["n_neurons"]), int(c["n_hidden_layers"])
+            dims = [n_input_dims] + [w] * h + [n_output_dims]
+            layers = []
+            for i in range(len(dims) - 1):
+                layers.append(nn.Linear(dims[i], dims[i + 1], bias=False))
+                if i < len(dims) - 2:
+                    layers.append(nn.ReLU())
+            self.net = nn.Sequential(*layers)
+            self.n_input_dims, self.n_output_dims = n_input_dims, n_output_dims
+
+        def forward(self, x):
+            return self.net(x.float())
+
+    m = types.ModuleType("tinycudann")
+    m.Encoding, m.Network, m.__torch_stand_in__ = Encoding, Network, True
+    sys.modules["tinycudann"] = m
+
+
 def install():
     if not any(isinstance(f, _StubFinder) for f in sys.meta_path):
         sys.meta_path.insert(0, _StubFinder())
     if "cuml" not in sys.modules:
         _install_cuml()
+    _install_tcnn()
 
 
 install()

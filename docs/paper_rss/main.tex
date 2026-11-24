@@ -184,7 +184,10 @@ The bias and its shadow dependence replicate (Table~\ref{tab:g1}, Fig.~\ref{fig:
 -0.85$ and shifts from $s=0$ to $s=1$ of $-8.0^\circ$, $-9.0^\circ$, $-5.0^\circ$, while the rendered-background loss
 moves by 0.5--1.5$^\circ$ and stays at $+2$ to $+4^\circ$. In line with Eq.~\eqref{eq:grad}, the background torque $T$
 increases with $s$ (exploratory; Spearman 1.00, 1.00, 0.66 on the three splats). P3 fails: the rendered background removes the shadow dependence but
-not every view-dependent offset.
+not every view-dependent offset. A further pre-registered test bounds the claim: without the gripper, scaling only
+the scene's own cast shadows moves the minimum by $\ge2^\circ$ with $|\rho|\ge0.8$ for one of four objects (the mug) on at
+least two splats (rule: three of four; fail). The dose-response therefore needs a shadow that covers a large part of
+the ROI, as an occluding gripper's does; small self-shadows of tabletop objects barely move the minimum.
 
 \textbf{A second tracker's objective.} RSRD~\cite{kerr2024rsrd} builds its DINO loss the same way (object-only render,
 sharp inside the mask and blurred outside, averaged over the ROI) and adds an RGB term over the ROI, also against
@@ -245,7 +248,8 @@ lift, which static sweeps do not show.
 
 \section{Limitations}
 All results so far are simulated, with one lighting model; real cameras add exposure changes and sensor noise. The
-dose-response is measured on the drill (three splats of one scene); the other objects enter only the stiffness tests.
+dose-response is established for the drill under a gripper's shadow (three splats of one scene); scene self-shadows
+alone do not reproduce it for most objects.
 The second tracker is RSRD's objective in our framework, not the RSRD code. Eq.~\eqref{eq:grad} is first-order and
 ignores the blur of the render near the boundary. The $\pm$ asymmetry of recovery is not explained by the mechanism
 alone: a depth-only tracker shows it too.
