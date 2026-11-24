@@ -201,7 +201,10 @@ tests the objective family, not an independent implementation.
 static tests say otherwise: near the truth the object features provide most of the rotational curvature for the
 drill (P1: background share 0.10--0.27) and 75--100\% of the translational stiffness for every object, and a
 rendered background is 1.4--1.6 times as stiff as the release loss. The trajectory failure of the masked variants is
-translation drift during the lift; static sweeps do not explain it.
+translation drift during the lift. A pre-registered sweep along the true lift trajectory (120 frames in which
+the gripper holds the drill) does not explain it either: at the true pose the masked objective is no more biased in
+translation than the release objective (median 6.0 vs.\ 6.0\,mm) and not flatter. The failure is dynamic, arising
+from estimate-dependent masks and ROIs, not from the objective at the true pose.
 
 \textbf{Corrections.} The pass rule was fixed before the runs: a paired roll-free bootstrap CI above zero in at least
 2 of 4 settings and below zero in none, lower pre-perturbation roll, and better than a depth-only control in at least
@@ -243,8 +246,9 @@ gripper's known geometry excluded, evaluated on held-out seeds against the same 
 the same exclusion.
 \textbf{E4: beyond first order.} The first-order term ranks and signs the bias but overestimates it; we will add the
 blur of the render near the boundary and test the corrected magnitude on held-out splats.
-\textbf{E5: the dynamic failure.} Explain why tracking without the background term drifts in translation during the
-lift, which static sweeps do not show.
+\textbf{E5: the dynamic failure.} Static sweeps at the true pose, at frame 0 and along the lift, do not explain
+the masked tracker's drift; we will test the feedback between the estimate-dependent mask and the ROI by tracking
+with masks frozen at the true pose versus at the estimate.
 
 \section{Limitations}
 All results so far are simulated, with one lighting model; real cameras add exposure changes and sensor noise. The

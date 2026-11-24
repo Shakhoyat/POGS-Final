@@ -54,5 +54,33 @@ def main(device: str = "cuda:0") -> None:
     print(f"{len(index)} frames -> {OUT}; click {np.round(click, 4).tolist()}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and len(__import__("sys").argv) == 1:
     main()
+
+
+SEQ_OUT = os.path.expanduser("~/pogs_external/off/sequences")
+OR4_CASES = [f"grasp_+15_s{s}" for s in range(10)] + [f"grasp_-15_s{s}" for s in range(10)]
+
+
+def sequences(phases=("approach", "lift")) -> None:
+    """OR4 inputs: approach + lift frames of the O4 sequences, exactly as our tracker sees them (load_sequence,
+    stereo depth profile), plus the drill's ground-truth world motion per frame (evaluation only)."""
+    from data.scene_generator.pick_place_benchmark import load_sequence
+    from data.scene_generator.tool_perturbation import TOOL_DATASET_DIR
+    os.makedirs(SEQ_OUT, exist_ok=True)
+    for name in OR4_CASES:
+        seq = load_sequence(TOOL_DATASET_DIR, name, lazy=True)
+        idx = [i for i, fm in enumerate(seq.meta["frames"]) if fm["phase"] in phases]
+        rgb = np.stack([(seq.frames[i].rgb.numpy() * 255).round().astype(np.uint8) for i in idx])
+        depth = np.stack([np.asarray(seq.frames[i].depth, np.float32) for i in idx])
+        gt = np.stack([seq.frames[i].gt_delta.get(DRILL_ID, np.eye(4)) for i in idx])
+        c = seq.camera
+        np.savez_compressed(os.path.join(SEQ_OUT, f"{name}.npz"), rgb=rgb, depth=depth, gt_delta=gt,
+                            frame=np.array(idx), phase=np.array([seq.meta["frames"][i]["phase"] for i in idx]),
+                            c2w_cv=c.c2w.cpu().numpy(), K=np.array([[c.fx, 0, c.cx], [0, c.fy, c.cy], [0, 0, 1]], float),
+                            width=c.width, height=c.height)
+        print(f"{name}: {len(idx)} frames", flush=True)
+
+
+if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] == "sequences":
+    sequences()

@@ -52,10 +52,23 @@ def fill_detic_cache(data: str, work: str, downscale: int = 2) -> int:
                                     orientation_method="none", center_method="none", auto_scale_poses=False,
                                     depth_unit_scale_factor=1.0).setup()
     outs = dp.get_dataparser_outputs("train")
+    import cv2
+    tj = json.load(open(os.path.join(data, "transforms.json")))
+    K = np.array([[tj["fl_x"], 0, tj["cx"]], [0, tj["fl_y"], tj["cy"]], [0, 0, 1]], float)
+    dist = np.zeros(8)
+    W, H = int(tj["w"]), int(tj["h"])
+    # FullImageDatamanager.cache_images always undistorts PERSPECTIVE cameras and crops to the valid ROI of
+    # cv2.getOptimalNewCameraMatrix(alpha=0) (1 px per side here), and Detic runs on those cached images. The id masks
+    # get the same undistort + crop, with nearest-neighbour remapping so ids do not blend.
+    newK, roi = cv2.getOptimalNewCameraMatrix(K, dist, (W, H), 0)
+    m1, m2 = cv2.initUndistortRectifyMap(K, dist, None, newK, (W, H), cv2.CV_32FC1)
+    x, y, w, h = roi
     arrs = []
     for fn in outs.image_filenames:
         ids = np.load(os.path.join(data, "masks_sim", os.path.splitext(os.path.basename(fn))[0] + ".npy"))
+        ids = cv2.remap(ids, m1, m2, cv2.INTER_NEAREST)[y:y + h, x:x + w]
         arrs.append(detic_like(ids, downscale))
+    print(f"Detic cache: undistort ROI {roi} (image {W}x{H})")
     cache = os.path.join(work, "outputs", os.path.basename(os.path.normpath(data)))
     os.makedirs(cache, exist_ok=True)
     obj = np.empty(len(arrs), dtype=object)
@@ -75,7 +88,11 @@ def main(data: str, work: str, seed: int) -> None:
     fill_detic_cache(data, work)
     from nerfstudio.scripts.train import entrypoint
     sys.argv = ["ns-train", "pogs", "--data", data, "--output-dir", os.path.join(work, "runs"),
-                "--vis", "tensorboard", "--machine.seed", str(seed), "--viewer.quit-on-train-completion", "True"]
+                "--vis", "tensorboard", "--machine.seed", str(seed), "--viewer.quit-on-train-completion", "True",
+                # Release bug: POGSModel.get_metrics_dict adds depth metrics only when self.training, but get_loss_dict
+                # asserts them for any batch with depth, so the periodic eval-batch pass crashes. Eval passes do not
+                # change the model; they are switched off (non-method deviation, ledger 8.OFF).
+                "--steps-per-eval-batch", "0", "--steps-per-eval-image", "0", "--steps-per-eval-all-images", "0"]
     entrypoint()
 
 
