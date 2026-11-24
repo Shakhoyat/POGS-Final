@@ -85,7 +85,7 @@ def _ring_cam(target, az, bcfg, device, radius=0.87, elev=30.0):
                          bcfg.track_width / 2.0, bcfg.track_height / 2.0, bcfg.track_width, bcfg.track_height)
 
 
-def _curves(opt, obs, axis6, grid, with_depth=True) -> Dict[str, List[float]]:
+def _curves(opt, obs, axis6, grid, with_depth=True, scale=math.pi / 180.0) -> Dict[str, List[float]]:
     """Per grid point: release term L and its pixel-sum split S_in + S_out (mask at the evaluated pose), the
     inside-object mean, the rendered-background term, and the depth term."""
     rf = obs.roi_frames[0]
@@ -95,7 +95,7 @@ def _curves(opt, obs, axis6, grid, with_depth=True) -> Dict[str, List[float]]:
     out = {n: [] for n in ("L", "S_in", "S_out", "inside_mean", "bg_rendered", "depth", "mask_frac", "split_err")}
     with torch.no_grad():
         for g in grid:
-            pd = perturbed_deltas(base, 0, torch.as_tensor(axis6 * math.radians(g), dtype=torch.float64))
+            pd = perturbed_deltas(base, 0, torch.as_tensor(axis6 * g * scale, dtype=torch.float64))
             o = opt._render(rf.camera, pd, 0, True)
             e = (real - LL.gaussian_blur2d(o["dino"], k)).norm(dim=-1)
             valid = torch.isfinite(e)
@@ -112,7 +112,7 @@ def _curves(opt, obs, axis6, grid, with_depth=True) -> Dict[str, List[float]]:
             ob = opt._render(rf.camera, pd, None, True, all_gaussians=True)
             out["bg_rendered"].append(float((real - LL.gaussian_blur2d(ob["dino"], k)).norm(dim=-1).nanmean()))
             if with_depth:
-                out["depth"].append(_terms(opt, obs, base, axis6 * math.radians(g))["depth"])
+                out["depth"].append(_terms(opt, obs, base, axis6 * g * scale)["depth"])
     return out
 
 
@@ -122,14 +122,18 @@ def _kappa(grid, v, half=5.0) -> float:
     return float(np.polyfit(grid[sel], v[sel], 2)[0]) if sel.sum() >= 3 else float("nan")
 
 
-def _row(label, axis, grid, cv, shadows, extra=None):
+def _row(label, axis, grid, cv, shadows, extra=None, half=5.0):
     r = {"view": label, "axis": axis, "shadows": shadows, **(extra or {}), "curves": cv}
-    r["kappa"] = {k: _kappa(grid, cv[k]) for k in ("L", "S_in", "S_out")}
+    r["kappa"] = {k: _kappa(grid, cv[k], half) for k in ("L", "S_in", "S_out")}
     r["argmin"] = {k: _argmin(grid, cv[k]) for k in ("L", "inside_mean", "bg_rendered", "depth") if cv[k]}
     return r
 
 
-def sweeps(seed: int, device: str = "cuda:0", objects_only=None) -> None:
+TRANS_GRID = np.arange(-30.0, 30.0 + 1e-9, 1.5)            # mm (G1b)
+TRANS_AXES = {"tx": np.r_[0, 0, 0, 1.0, 0, 0], "ty": np.r_[0, 0, 0, 0, 1.0, 0], "tz": np.r_[0, 0, 0, 0, 0, 1.0]}
+
+
+def sweeps(seed: int, device: str = "cuda:0", objects_only=None, translation: bool = False) -> None:
     from data.scene_generator.pick_place_benchmark import BenchmarkConfig
     from data.scene_generator.pick_place_benchmark import tracking_camera as bench_cam
     os.makedirs(OUT, exist_ok=True)
@@ -162,7 +166,18 @@ def sweeps(seed: int, device: str = "cuda:0", objects_only=None) -> None:
             except RuntimeError as e:
                 print(f"[g1] seed {seed} {name} {label}: skipped ({e})", flush=True)
                 continue
-            for ax, a6 in AXES.items():
+            for ax, a6 in (TRANS_AXES if translation else AXES).items():
+                if translation:
+                    r = _row(label, ax, TRANS_GRID, _curves(opt, obs, a6, TRANS_GRID, scale=1e-3), shadows,
+                             {"object": name, "seed": seed}, half=7.5)
+                    k_in = _kappa(TRANS_GRID, np.asarray(r["curves"]["inside_mean"]) *
+                                  np.asarray(r["curves"]["mask_frac"]), 7.5)
+                    r["kappa"]["inside_scaled"] = k_in
+                    r["kappa"]["bg_rendered"] = _kappa(TRANS_GRID, r["curves"]["bg_rendered"], 7.5)
+                    rows.append(r)
+                    print(f"[g1b] s{seed} {name:14s} {label:26s} {ax}: argmin L {r['argmin']['L']:+.1f} mm, bg "
+                          f"{r['argmin']['bg_rendered']:+.1f}; k_in/k_L {k_in / r['kappa']['L']:.2f}", flush=True)
+                    continue
                 r = _row(label, ax, GRID, _curves(opt, obs, a6, GRID), shadows, {"object": name, "seed": seed})
                 rows.append(r)
                 kL = r["kappa"]["L"]
@@ -170,6 +185,9 @@ def sweeps(seed: int, device: str = "cuda:0", objects_only=None) -> None:
                 print(f"[g1] s{seed} {name:14s} {label:26s} {ax}: argmin L {r['argmin']['L']:+.0f} in "
                       f"{r['argmin']['inside_mean']:+.0f} bg {r['argmin']['bg_rendered']:+.0f} depth "
                       f"{r['argmin']['depth']:+.0f}  bg-share {b:.2f}", flush=True)
+    if translation:
+        write_json(os.path.join(OUT, f"trans_seed{seed}.json"), {"grid_mm": TRANS_GRID.tolist(), "rows": rows})
+        return
     write_json(os.path.join(OUT, f"sweeps_seed{seed}.json"), {"grid_deg": GRID.tolist(), "rows": rows})
 
 
@@ -302,6 +320,26 @@ def summarise() -> None:
           f"P5: rendered-background movement < half of release on {n5}/{nd}. "
           f"**{'PASS' if n5 >= 2 else 'FAIL'}**" + (" (incomplete)" if nd < 3 else ""), ""]
 
+    # G1b T1
+    tp = os.path.join(OUT, "trans_seed0.json")
+    if os.path.exists(tp):
+        T = json.load(open(tp))
+        L += ["### G1b T1: object-feature share of the translational stiffness (seed 0)", "",
+              "| Object | median κ(inside·frac)/κ(L) | median κ(rendered bg)/κ(L) | median argmin L / bg (mm) | < 0.5 |",
+              "|---|---|---|---|---|"]
+        n1 = 0
+        for name in PRIMARY:
+            rows = [r for r in T["rows"] if r["object"] == name and r["kappa"]["L"] > 0]
+            if not rows:
+                continue
+            a = float(np.median([r["kappa"]["inside_scaled"] / r["kappa"]["L"] for r in rows]))
+            b = float(np.median([r["kappa"]["bg_rendered"] / r["kappa"]["L"] for r in rows]))
+            mL = float(np.median([abs(r["argmin"]["L"]) for r in rows]))
+            mB = float(np.median([abs(r["argmin"]["bg_rendered"]) for r in rows]))
+            n1 += a < 0.5
+            L.append(f"| {name} | {a:.2f} | {b:.2f} | {mL:.1f} / {mB:.1f} | {'yes' if a < 0.5 else 'no'} |")
+        L += ["", f"T1: {n1}/4. **{'PASS' if n1 >= 3 else 'FAIL'}**", ""]
+
     # exploratory: argmin tables
     L += ["## Exploratory: argmins by object and view set (median [min, max], deg)", "",
           "| Splat | Object | axis | views | release L | inside mean | rendered bg | depth |", "|---|---|---|---|---|---|---|---|"]
@@ -325,7 +363,7 @@ def summarise() -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["train", "sweeps", "dose", "summarise"])
+    ap.add_argument("step", choices=["train", "sweeps", "trans", "dose", "summarise"])
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--objects", nargs="*", default=None)
     a = ap.parse_args()
@@ -333,6 +371,8 @@ if __name__ == "__main__":
         load_splat(a.seed)
     elif a.step == "sweeps":
         sweeps(a.seed, objects_only=a.objects)
+    elif a.step == "trans":
+        sweeps(a.seed, objects_only=a.objects or list(PRIMARY), translation=True)
     elif a.step == "dose":
         dose(a.seed)
     else:
