@@ -286,7 +286,9 @@ dose-response is established for the drill under a gripper's shadow (three splat
 alone do not reproduce it for most objects.
 The second tracker is RSRD's objective in our framework, not the RSRD code. Eq.~\eqref{eq:grad} is first-order and
 ignores the blur of the render near the boundary. The $\pm$ asymmetry of recovery is not explained by the mechanism
-alone: a depth-only tracker shows it too.
+alone: a depth-only tracker shows it too. The official-code runs replace Detic by simulator masks and the grouping
+heads' hash-grid library by a pure-torch stand-in, on a newer torch/CUDA; the O4 approach is one trajectory shared by
+all seeds.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
