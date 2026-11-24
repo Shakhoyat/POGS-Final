@@ -22,10 +22,16 @@ jobs:
         with:
           name: progress_report
           path: docs/report/progress_report.pdf
+      - name: Page previews and overfull-box check
+        run: |
+          sudo apt-get install -y -qq poppler-utils
+          mkdir -p docs/report/preview && rm -f docs/report/preview/*.png
+          pdftoppm -r 70 -png docs/report/progress_report.pdf docs/report/preview/page
+          grep -E "Overfull|undefined|Warning" docs/report/progress_report.log > docs/report/preview/latex_warnings.txt || true
       - name: Commit the PDF back to the branch
         run: |
           git config user.name "latex-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -f docs/report/progress_report.pdf
-          git diff --cached --quiet || git commit -m "CI: compiled progress_report.pdf [skip ci]"
+          git add -f docs/report/progress_report.pdf docs/report/preview
+          git diff --cached --quiet || git commit -m "CI: compiled progress_report.pdf + previews [skip ci]"
           git push
