@@ -243,7 +243,7 @@ Alignment & CLIP ViT-B/16 & 11.8\\
 \draw[ar] (loss) -- (obj); \draw[ar] (loss) -- (bg);
 \draw[ar] (bg) -- (rest); \draw[ar] (bg) -- (bias);
 \end{tikzpicture}
-\caption{Mechanism of the roll error. Ground truth was verified exact; the drill's own features have their minimum within $1^\circ$ of the true pose in all 16 views tested.}
+\caption{Mechanism of the roll error in our splats. Ground truth was verified exact; the drill's own features have their minimum within $1^\circ$ of the true pose in all 16 views tested. The static $-10^\circ$ offset is not reproduced by the official splat (Section~\ref{sec:official}).}
 \end{figure}
 
 \begin{figure}[H]
@@ -268,11 +268,29 @@ Alignment & CLIP ViT-B/16 & 11.8\\
 \end{itemize}
 
 %==========================================================================
+\section{Check with the official POGS code (25 Nov)}\label{sec:official}
+We trained and ran the official POGS release on the same simulated capture. Environment deviations: Python 3.10 with a newer torch/CUDA, simulator masks in place of Detic, and a pure-torch stand-in for the hash-grid library of the grouping heads. Every test was written down before it ran.
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}p{0.62\linewidth}p{0.3\linewidth}@{}}\toprule
+Test & Result\\\midrule
+Official loss has the $-10^\circ$ roll minimum with the gripper's shadow & not met ($+2^\circ$)\\
+Official loss follows the shadow strength & not met ($\rho=0.00$)\\
+Official and our loss agree on 13 views without the gripper & met ($\rho=0.53$, median $2^\circ$)\\
+Official tracker has the roll error before the gripper touches the drill & met (median $19.4^\circ$; no-motion baseline $0^\circ$)\\
+An initialisation on the region around the drill removes it & not met\\\bottomrule
+\end{tabular}\end{table}
+\textbf{Reading.} Our tracker follows the official tracker's roll during the approach within a median of $0.7^\circ$, so the re-implementation is faithful. The roll error that the paper's rule ignores is real in the official code as well, and larger. Its common cause is a nearly flat, asymmetric roll landscape that the descending gripper tilts towards large negative roll (Fig.~\ref{fig:landscape}); the tracker slides at its step limit. The static, shadow-driven $-10^\circ$ offset of Section~\ref{sec:further} belongs to our splats only: swapping splats between the two pipelines shows the tracking objectives agree and the splats differ.
+\begin{figure}[H]\centering
+\includegraphics[width=0.9\linewidth]{\figdir/roll_landscape.pdf}
+\caption{Roll landscape of the tracking loss at the true pose over the approach, official and our splat. As the gripper descends (frames 2--3) the loss slopes towards large negative roll in both.}\label{fig:landscape}
+\end{figure}
+
+%==========================================================================
 \section{Next steps and open questions}
 \begin{enumerate}
-\item Write a short mechanism paper on feature-field tracking based on Section~\ref{sec:further}.
+\item Submit an RSS 2027 Stage~1 extended abstract (due 4 Dec) centred on the evaluation finding, now reproduced with the official code; the mechanism is reported with its limits.
 \item One pre-registered test of an explicit, shadow-free silhouette term from depth (6 GPU hours, same criterion), if a known gripper model may be used to exclude gripper pixels.
-\item Before publication: three independently trained splats and at least one real dataset.
+\item Real-data validation with our own captures (drill, AprilTag board, one lamp), or with the authors' data if shared.
 \end{enumerate}
 \textbf{Questions.} (1) Is a mechanism paper an acceptable outcome, and at which venue? (2) May the tracker use a known gripper model to exclude gripper pixels (POGS lists this as future work)?
 
