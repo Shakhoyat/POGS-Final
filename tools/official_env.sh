@@ -32,6 +32,8 @@ echo "== gsplat CUDA JIT"; $PY -c "from gsplat.cuda._backend import _C; assert _
 echo "== tiny-cuda-nn (bindings/torch, build from source)"
 if ! $PY -c "import tinycudann" 2>/dev/null; then
   [ -d "$HOME/third_party_pinned/tiny-cuda-nn" ] || git clone -q --recursive https://github.com/NVlabs/tiny-cuda-nn "$HOME/third_party_pinned/tiny-cuda-nn"
+  # torch 2.14 headers require C++20; tcnn's setup.py pins C++17 for CUDA >= 11 (build flag only)
+  sed -i.orig 's/^cpp_standard = 17$/cpp_standard = 20/; s/\t\t\tcpp_standard = 17$/\t\t\tcpp_standard = 20/' "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch/setup.py"
   ( cd "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch" && uvp --no-build-isolation . )
 fi
 $PY -c "import tinycudann, torch; print('tcnn OK', torch.__version__)"
