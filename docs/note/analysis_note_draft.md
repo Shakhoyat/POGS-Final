@@ -120,6 +120,17 @@ bias follows how much background a rotation of the asymmetric drill uncovers, we
 feature norm, which the shadow sets; where the shadow lies adds little. Magnitudes are overestimated ≈2× (first order,
 no blur). This corrects the earlier wording "the shadow on one side produces a torque" (RSS draft revised).
 
+## 5d. Bounds on generality and the dynamic failure (pre-registered 2026-11-25)
+- **G1c** (`data_results/g1c_dose_objects/summary.md`): without the gripper, scaling only the scene's own cast
+  shadows moves the minimum (|ρ| ≥ 0.8, |shift| ≥ 2°) for 1 of 4 objects on ≥ 2/3 splats (mug only). **C1 FAIL,
+  C2 FAIL.** The dose-response needs a shadow covering much of the ROI (an occluding gripper); small self-shadows
+  barely move the minimum. Claim narrowed accordingly.
+- **E5** (`data_results/e5_dynamic/summary.md`): along the true lift trajectory (120 frames, gripper holding the
+  drill), the masked objective is not more biased in translation than the release objective (median max-axis
+  argmin 6.0 vs 6.0 mm; **D1 FAIL**) and not flatter (κ ratio 6.4; **D2 FAIL**). The masked tracker's drift is
+  dynamic (estimate-dependent masks/ROI), not a property of the objective at the true pose. Exploratory: the depth
+  term alone is 9 mm off in the lift (it fits the gripper).
+
 ## 6. Recommendations for tool-tracking evaluation (to finalise)
 1. Report the tool-axis rule and the full-rotation rule side by side, and say which DOF a rule leaves free.
 2. Score every recovery metric for Static. Do not use relative-to-pre-perturbation rules, or stratify them by
