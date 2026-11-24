@@ -27,6 +27,7 @@ wp.init()  # as track_main_online_demo.py
 from experiments.off_repro.official_sweeps import FR, OUT, ns_camera, setup  # noqa: E402
 
 SEQ = os.path.expanduser("~/pogs_external/off/sequences")
+PROBE = os.environ.get("OFF_PROBE", "0") == "1"
 
 
 def _swing_twist(R_err, axis):
@@ -93,14 +94,25 @@ def run(config: str) -> None:
             G[:3, :3] = Tg[:3, :3]
             G[:3, 3] = Tg[:3, :3] @ c0 + Tg[:3, 3]
             roll, swing = _swing_twist(G[:3, :3].T @ P[:3, :3], axis)
-            rows.append(dict(frame=int(z["frame"][k]), phase=str(z["phase"][k]), roll=roll, swing=swing,
-                             trans_err_cm=float(np.linalg.norm(P[:3, 3] - G[:3, 3]) * 100)))
+            row = dict(frame=int(z["frame"][k]), phase=str(z["phase"][k]), roll=roll, swing=swing,
+                       trans_err_cm=float(np.linalg.norm(P[:3, 3] - G[:3, 3]) * 100))
+            if PROBE and k > 0:          # 8.OFF-P (exploratory): official loss at the estimate vs at the GT pose
+                from scipy.spatial.transform import Rotation
+                qg = Rotation.from_matrix(G[:3, :3]).as_quat()            # xyzw
+                dg = torch.tensor([[*(G[:3, 3] - c0), qg[3], qg[0], qg[1], qg[2]]], dtype=torch.float32, device="cuda")
+                with torch.no_grad():
+                    le = opt.get_optim_loss(opt.frame, opt.part_deltas.detach().clone(), True, False, False, False,
+                                            False, False, True)[0]
+                    lg = opt.get_optim_loss(opt.frame, dg, True, False, False, False, False, False, True)[0]
+                row.update(loss_est=float(le), loss_gt=float(lg))
+            rows.append(row)
         last_app = [r for r in rows if r["phase"] == "approach"][-1]
         print(f"[or4] {name}: last approach frame {last_app['frame']} roll {last_app['roll']:+.1f} swing "
               f"{last_app['swing']:.1f} trans {last_app['trans_err_cm']:.2f} cm", flush=True)
         out.append(dict(case=name, rows=rows))
         opt.reset_transforms()
-    json.dump({"setup": info, "config": config, "cases": out}, open(os.path.join(OUT, "official_track.json"), "w"))
+    json.dump({"setup": info, "config": config, "cases": out},
+              open(os.path.join(OUT, "official_track_probe.json" if PROBE else "official_track.json"), "w"))
 
 
 def summarise() -> None:

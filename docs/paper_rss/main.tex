@@ -111,7 +111,10 @@ $12.5^\circ$ at the end of the approach, before the gripper touches the drill. T
 about the perturbation axis is positive in 167 of 200 trials, so a $+$ perturbation moves the truth toward the biased
 estimate and a $-$ one away from it, which explains why $+$ settings recover more often. A post-hoc relative rule
 (``back to the pre-perturbation error'') is passed by Static in 7--9 of 21--29 trials when the perturbation aligns
-with this error and never (0 of 21--29) when it opposes it. A Kalman motion prior does not change any of this: a filter models zero-mean scatter, not a bias.
+with this error and never (0 of 21--29) when it opposes it. A Kalman motion prior does not change any of this: a filter models zero-mean scatter, not a bias. The official
+POGS tracking loop, trained and run on the same frames (pre-registered), shows the error too and more strongly: a
+median $|\text{roll}|$ of $19.4^\circ$ at the end of the approach (rule $\ge5^\circ$, pass; negative in 20 of 20
+sequences; Static $0^\circ$), growing from $-7^\circ$ after initialisation as the gripper descends.
 \begin{figure}[t]\centering\includegraphics[width=\linewidth]{figs/o4_roll_trace.pdf}
 \caption{Median roll about the bit axis and swing of the axis over the in-grasp trials (200 trials). The roll error
 exists before the perturbation.}\label{fig:roll}\end{figure}
@@ -205,8 +208,12 @@ the same frames. The large bias does not reproduce: with the gripper's shadow th
 at $+2^\circ$ (rule $\le-5^\circ$; fail), and its minimum does not follow the shadow strength ($\rho=0.00$; fail).
 Across the 13 views without the gripper the two pipelines agree (Spearman 0.53, median difference $2^\circ$; pass).
 An exploratory swap locates the difference: our tracking code on the official splat gives $-1.5^\circ$ with no
-dose-response, and $-10.5^\circ$ on our splat. The two tracking objectives agree; the trained splats differ. The
-implicit silhouette term is present in both, but how strongly it biases the pose depends on the splat.
+dose-response, and $-10.5^\circ$ on our splat. The two tracking objectives agree; the trained splats differ. At the
+tracking camera our drill groups cover 730--1100 rendered pixels outside the true silhouette, the official one 330,
+and our semi-transparent fringe is 3--4 times larger; across the four splats this over-coverage ranks with the bias
+(exploratory, $n=4$). The implicit silhouette term is present in both pipelines; a static, shadow-driven minimum
+arises when the object group's silhouette spills onto the background. The official tracker's roll error (Sec.~IV) is
+instead a frame-by-frame drift, whose cause we are testing.
 
 \section{H4 refuted, and six corrections that fail}\label{sec:fixes}
 \textbf{H4.} Removing the background breaks tracking: DINO restricted to the per-pose object mask recovers 1/0/4/4 of

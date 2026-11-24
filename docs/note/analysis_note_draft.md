@@ -131,6 +131,22 @@ no blur). This corrects the earlier wording "the shadow on one side produces a t
   dynamic (estimate-dependent masks/ROI), not a property of the objective at the true pose. Exploratory: the depth
   term alone is 9 mm off in the lift (it fits the gripper).
 
+## 5e. Official POGS code (8.OFF, pre-registered 2026-11-25) — changes the thesis
+- **OR1 FAIL, OR2 FAIL, OR3 pass** (`data_results/off_repro/summary.md`): trained and evaluated with the official
+  code on the same capture, the loss minimum with the gripper's shadow is +2° (not −10°) and does not follow shadow
+  strength; across 13 views without the gripper the pipelines agree (ρ 0.53, median 2°).
+- **Swap (exploratory)**: our tracking code on the official splat gives −1.5° with no dose-response; on our splat
+  −10.5°. The objectives agree; the splats differ. **Silhouette (exploratory)**: our drill groups over-cover the
+  true silhouette (728–1096 px vs 328) with a 3–4× larger semi-transparent halo; over-coverage ranks with the bias
+  over the four splats.
+- **OR4 pass** (`summary_or4.md`): the official tracking loop reaches a median |roll| of 19.4° by the end of the
+  approach (Static 0°), negative in 20/20, growing from −7.4° after initialisation and diverging in the lift.
+- **Revised thesis.** (1) The evaluation finding holds with the official code, more strongly: the roll-free rule hides
+  a large roll error that exists before contact. (2) The implicit silhouette term is in both objectives, but the
+  static, shadow-driven −10° minimum is a property of splats whose object group over-covers its silhouette (ours),
+  not of the official splat. (3) The official tracker's roll error is a progressive drift, cause under test
+  (8.OFF-P: does the official loss prefer the drifted pose?). Title/claim change is a user decision.
+
 ## 6. Recommendations for tool-tracking evaluation (to finalise)
 1. Report the tool-axis rule and the full-rotation rule side by side, and say which DOF a rule leaves free.
 2. Score every recovery metric for Static. Do not use relative-to-pre-perturbation rules, or stratify them by
