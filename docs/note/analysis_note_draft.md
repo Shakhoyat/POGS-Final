@@ -10,6 +10,15 @@ background vs a zero render), and that term is what lighting, shadows and viewpo
 ground truth exact (B0) → object features unbiased (B1e) → the background does the work (masking it collapses
 recovery: 1/0/4/4 vs 9/12/16/23) → the DINO term matters (depth only: 0 everywhere).
 
+**Final G1/G1b/G2 results 2026-11-24 (all pre-registered; `data_results/g1_generality/summary.md`,
+`data_results/g2_rsrd/summary.md`).** P2 pass (drill roll bias −10/−10/−5° on three splats), P4 pass (monotone
+shadow dose-response on 3/3 splats, ρ −0.97/−0.85/−0.85, shift −8/−9/−5°), P5 pass (rendered background moves
+0.5–1.5°); P1 fail (2/4), P3 fail (2/4), G1b T1 fail (object features carry 0.75–1.00 of the translational
+stiffness), G2 Q1/Q2 fail (0/4), G2 Q3 pass (RSRD objective −10° with the gripper shadow). **Thesis now: the implicit
+silhouette term is the carrier of a shadow-driven pose bias, replicated across splats and in RSRD's objective; it does
+not supply the static restoring force, and why tracking fails without it is open (dynamic).** Paper draft retitled
+"Shadows Bias Feature-Field Object Trackers Through an Implicit Silhouette Term".
+
 **Correction 2026-11-24 (G1, pre-registered; seed-0 splat).** The static sweeps do not support "the background
 supplies most of the restoring force" for rotation. P1 fails on seed 0 (median background share of the rotational
 curvature > 0.5 for 2 of 4 objects; drill 0.10) and P3 fails (2 of 4). Exploratory: the object's own features give

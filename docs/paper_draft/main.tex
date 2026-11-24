@@ -1,6 +1,5 @@
 \documentclass[conference]{IEEEtran}
 % Draft, 2026-11-24. Simulation only. Numbers come from the result files named in docs/note/analysis_note_draft.md.
-% Sections marked \pending are filled from pre-registered steps G1b/G2 when they finish.
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{amsmath,amssymb}
@@ -10,7 +9,7 @@
 \newcommand{\figdir}{../report/figs}
 \newcommand{\pending}[1]{\textcolor{orange}{[pending: #1]}}
 
-\title{Where Does the Restoring Force Come From?\\Implicit Silhouettes in Feature-Field Object Tracking}
+\title{Shadows Bias Feature-Field Object Trackers\\Through an Implicit Silhouette Term}
 \author{\IEEEauthorblockN{[Author names]}\IEEEauthorblockA{[Affiliation]}}
 
 \begin{document}
@@ -19,16 +18,17 @@
 \begin{abstract}
 Trackers that optimise the pose of a Gaussian splat with distilled DINO features against live image features
 report high recovery rates for tools under perturbation. We re-implement one such tracker, POGS, in simulation
-with exact ground truth and find two things. First, the published recovery rule leaves roll about the tool axis
-free, and it hides a systematic roll error of $9.5 \pm 2.8^\circ$ that is present before any perturbation; under a full
-rotation rule recovery falls from 17--39 to 2--14 of 50 trials. Second, the error is not an optimisation failure.
-The loss prefers the wrong pose on 87--100\% of frames, because the feature loss averaged over the region of
-interest compares background pixels with an empty render. This acts as an implicit silhouette term, and cast shadows and viewpoint bias it: the roll minimum moves from
-$-2.5^\circ$ to $-10.5^\circ$ as the gripper's shadow is strengthened, while the same loss against a rendered
-background moves by $1.5^\circ$. \pending{G1b: translational stiffness} Six corrections, including stronger depth, newer backbones,
-feature upsampling and a rendered background, all fail a criterion fixed in advance. We give a pre-registered test
-of generality across splats and objects and a set of evaluation rules: report both rules, score a no-motion
-baseline, and decompose roll from swing.
+with exact ground truth. The published recovery rule leaves roll about the tool axis free, and it hides a
+systematic roll error of $9.5 \pm 2.8^\circ$ that is present before any perturbation; under a full rotation rule
+recovery falls from 17--39 to 2--14 of 50 trials. The error is not an optimisation failure: the loss prefers the
+wrong pose on 87--100\% of frames. Its source is the part of the region-of-interest feature loss that compares
+background pixels with an empty render, an implicit silhouette term. On three independently trained splats the
+roll minimum follows the strength of the gripper's cast shadow (Spearman $\rho \leq -0.85$, shifts of 5--9$^\circ$),
+while the same loss with a rendered background moves by at most $1.5^\circ$; the loss of RSRD, the tracker POGS
+derives from, shows the same bias. Pre-registered tests also refute our initial hypothesis that this term supplies
+the restoring force: the object's own features provide most of the local stiffness in rotation and translation.
+Six corrections fail a criterion fixed in advance. We give evaluation rules, with code: report both rules, score a
+no-motion baseline, and decompose roll from swing.
 \end{abstract}
 
 \section{Introduction}
@@ -42,11 +42,12 @@ We set out to reproduce this result and to understand what limits it. Our contri
 \item \textbf{An evaluation finding.} The published rule is roll-free. Under it our re-implementation matches the
 paper's $30^\circ$ tier in one direction ($39$ vs.\ $40$ of 50, Fisher $p=1.0$); under a full rotation rule recovery
 collapses, and a relative ``back to pre-perturbation error'' rule is passed by a tracker that does not move.
-\item \textbf{A mechanism.} The ROI-averaged feature loss contains an implicit silhouette term (background vs.\
-an empty render) that carries a shadow- and viewpoint-dependent bias
-(Sec.~\ref{sec:mechanism}). This links feature-field trackers to region-based silhouette trackers, for which
+\item \textbf{A bias mechanism, replicated.} The ROI-averaged feature loss contains an implicit silhouette term
+(background vs.\ an empty render) that carries a shadow- and viewpoint-dependent bias, with a dose-response on three
+splats and in a second objective, RSRD's (Sec.~\ref{sec:mechanism}, \ref{sec:g1}). This links feature-field trackers to region-based silhouette trackers, for which
 sensitivity to shadows and background is well known~\cite{prisacariu2012pwp3d,stoiber2022srt3d}.
-\item \textbf{Negative results with a fixed criterion}: six corrections, none passes (Sec.~\ref{sec:fixes}).
+\item \textbf{Negative results with fixed criteria}: the term does not supply the static restoring force
+(three pre-registered tests), and six corrections fail (Sec.~\ref{sec:fixes}).
 \item \textbf{Evaluation rules} with code (Sec.~\ref{sec:recs}).
 \end{enumerate}
 
@@ -58,7 +59,7 @@ Analysis-by-synthesis pose estimation with radiance fields started with iNeRF~\c
 trackers with RGB or mask objectives include 6DOPE-GS~\cite{jin20246dope} and GSGTrack~\cite{gsgtrack2024}.
 \textbf{Region-based tracking.} PWP3D~\cite{prisacariu2012pwp3d} and SRT3D~\cite{stoiber2022srt3d} optimise a pose
 so that the projected silhouette separates foreground and background statistics; we show that a feature-field
-loss contains such a term implicitly. \textbf{Evaluation.} Pose metrics that are ambiguous under symmetries or
+loss contains such a term implicitly, and that it, not the object features, carries the shadow bias. \textbf{Evaluation.} Pose metrics that are ambiguous under symmetries or
 free DOF are discussed in~\cite{hodan2016evaluation}; we add the case of a rule that frees a DOF in which the
 tracker is biased.
 
@@ -81,7 +82,7 @@ Its sign is positive in 167 of 200 trials, which explains why $+$ perturbations 
 \begin{figure}[t]\centering\includegraphics[width=\linewidth]{\figdir/o4_roll_trace.pdf}
 \caption{Median roll about the bit axis and swing of the axis over the in-grasp trials (200 trials).}\label{fig:roll}\end{figure}
 
-\section{Mechanism: an implicit silhouette term}\label{sec:mechanism}
+\section{Mechanism: a biased implicit silhouette term}\label{sec:mechanism}
 Let $e(p)=\lVert f(p)-\hat f_\theta(p)\rVert$ be the per-pixel feature residual in an ROI of $N$ pixels, with
 $\hat f_\theta$ the blurred object-only render at pose $\theta$. With $M(\theta)$ the rendered object mask,
 \begin{align}
@@ -126,12 +127,18 @@ The bias and its dependence on shadow replicate across splats (P2, P4, P5). The 
 the background term supplies most of the restoring force, does not hold for rotation: near the truth the object's
 own features give most of the curvature (P1), and the rotational basins are about $\pm20^\circ$ wide with or without
 the background term. A caveat on P1: the split $S_\text{in}+S_\text{out}$ uses the mask at the evaluated pose, so
-pixels crossing the silhouette are counted inside; it is not a clean causal split. \pending{G1b: translational
-stiffness, pre-registered after reading P1.}
+pixels crossing the silhouette are counted inside; it is not a clean causal split. Because the masked variants failed in trajectories through translation drift, we pre-registered one more test
+after reading P1 (\nolinkurl{docs/note/g1b_translation_preregistration.md}): the object features supply less than
+half of the translational stiffness for at least 3 of 4 objects. It fails (0/4): their share is 0.75--1.00, and a
+rendered background gives 1.4--1.6 times the release stiffness. Static sweeps therefore do not explain why tracking
+without the background term fails; that failure is dynamic (gripper occlusion, mask feedback), and we leave it open.
 \subsection{A second tracker: the RSRD objective}\label{sec:g2}
 RSRD~\cite{kerr2024rsrd} builds its DINO loss the same way (object-only render, sharp inside the mask and blurred
 outside, averaged over the ROI) and adds an RGB L1 term over the ROI, also against the object-only render.
-\pending{G2, pre-registered: Q1--Q3.} RSRD and POGS share code lineage, so this tests the objective family, not an
+We evaluated RSRD's objective (DINO term as above, $+0.05\times$ RGB L1, metric depth inside the mask) with our splat
+and renderer, pre-registered (\nolinkurl{docs/note/g2_second_tracker_preregistration.md}). As for POGS, the background
+does not carry most of the curvature (Q1, Q2: 0/4 objects; drill 0.09), but the drill's roll minimum with the
+gripper's shadow is at $-10^\circ$ (Q3, pass), the same as POGS. RSRD and POGS share code lineage, so this tests the objective family, not an
 independent implementation.
 
 \section{Corrections tested}\label{sec:fixes}

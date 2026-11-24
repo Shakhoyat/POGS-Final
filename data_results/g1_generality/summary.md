@@ -63,6 +63,17 @@ P3: 2/4 objects. **FAIL**
 P4: ρ ≤ −0.8 on 3/3, movement ≥ 4° on 3/3. **PASS**
 P5: rendered-background movement < half of release on 3/3. **PASS**
 
+### G1b T1: object-feature share of the translational stiffness (seed 0)
+
+| Object | median κ(inside·frac)/κ(L) | median κ(rendered bg)/κ(L) | median argmin L / bg (mm) | < 0.5 |
+|---|---|---|---|---|
+| power_drill | 0.94 | 1.46 | 0.0 / 1.5 | no |
+| ceramic_mug | 0.89 | 1.40 | 1.5 / 1.5 | no |
+| mustard_bottle | 0.75 | 1.60 | 1.5 / 1.5 | no |
+| cereal_box | 1.00 | 1.43 | 1.5 / 1.5 | no |
+
+T1: 0/4. **FAIL**
+
 ## Exploratory: argmins by object and view set (median [min, max], deg)
 
 | Splat | Object | axis | views | release L | inside mean | rendered bg | depth |
