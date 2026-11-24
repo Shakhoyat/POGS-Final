@@ -147,6 +147,20 @@ no blur). This corrects the earlier wording "the shadow on one side produces a t
   not of the official splat. (3) The official tracker's roll error is a progressive drift, cause under test
   (8.OFF-P: does the official loss prefer the drifted pose?). Title/claim change is a user decision.
 
+## 5f. Same symptom, different causes (exploratory + E1a, 2026-11-25)
+- **Trajectories match** (`or4_vs_ours.json`): on the 20 OR4 sequences our release tracker and the official tracker
+  agree frame by frame in the approach (median |Δroll| 0.7°, ρ 0.87, 80 frames): both ≈ −7° after init, −17 to
+  −19° at the last approach frame. They diverge in the lift (median 16.6°; the official drifts further).
+- **Official objective prefers the truth** (8.OFF-P): loss(est) < loss(GT) on 20/60 approach and 2/120 lift frames,
+  unlike ours (E2: 87–100%). The official roll error is a failure to return to a near-truth minimum, not a biased one.
+- **E1a (pre-registered) FAIL**: pruning drill-group Gaussians whose centres fall outside the true silhouette (110–175
+  per splat) removes only ~30% of the over-coverage and leaves the bias (−7.5/−10.5/−7.5°); random control keeps it.
+  Over-coverage remains a correlate (n = 4 splats), not a demonstrated cause.
+- **Implication for the thesis**: the robust, reproduced result is the evaluation finding (a large roll error before
+  contact, hidden by the roll-free rule, present in the official tracker and in ours). The implicit-silhouette bias
+  is one route to it (our splats); the official splat reaches the same error by drift. F1 tests where the shared
+  drift starts (whole-image init loss vs descending gripper).
+
 ## 6. Recommendations for tool-tracking evaluation (to finalise)
 1. Report the tool-axis rule and the full-rotation rule side by side, and say which DOF a rule leaves free.
 2. Score every recovery metric for Static. Do not use relative-to-pre-perturbation rules, or stratify them by

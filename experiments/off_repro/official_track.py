@@ -28,6 +28,41 @@ from experiments.off_repro.official_sweeps import FR, OUT, ns_camera, setup  # n
 
 SEQ = os.path.expanduser("~/pogs_external/off/sequences")
 PROBE = os.environ.get("OFF_PROBE", "0") == "1"
+ROI_INIT = os.environ.get("OFF_ROI_INIT", "0") == "1"   # OR5 variant (docs/note/off_or5_roi_init_preregistration.md)
+
+
+def roi_initialize(opt, rgb, depth, cam, dino_fn):
+    """Copy of the official `initialize_obj_pose` with ONE change: stage 1 evaluates the loss on the ROI around the
+    object at the scan pose (official: whole image). Stage 2 and everything after are unchanged."""
+    from pogs.tracking.observation import PosedObservation
+    def try_opt(start, niter, use_depth, use_mask=False, use_roi=False):
+        opt.reset_transforms()
+        w = torch.nn.Parameter(start.detach().clone())
+        o = torch.optim.Adam([w], lr=0.005)
+        for _ in range(niter):
+            tape = wp.Tape()
+            o.zero_grad()
+            with tape:
+                loss, _o = opt.get_optim_loss(opt.frame, w, True, use_depth, False, False, False, use_mask=use_mask,
+                                              use_roi=use_roi)
+            loss.backward()
+            tape.backward()
+            o.step()
+        opt.is_initialized = True
+        return loss, w.data.detach()
+    start = torch.zeros(len(opt.group_masks), 7, dtype=torch.float32, device="cuda")
+    start[:, 3] = 1.0
+    opt.is_initialized = True                      # set_observation asserts it; ROI at the scan pose
+    opt.set_observation(PosedObservation(rgb=rgb, camera=cam, dino_fn=dino_fn, metric_depth_img=depth))
+    _, best = try_opt(start, 100, use_depth=False, use_roi=True)          # CHANGED (official: use_roi=False)
+    opt.set_observation(PosedObservation(rgb=rgb, camera=cam, dino_fn=dino_fn, metric_depth_img=depth))
+    _, best = try_opt(best, 70, use_depth=True, use_mask=opt.config.use_mask_loss, use_roi=True)
+    with opt.render_lock:
+        opt.apply_to_model(best, opt.group_labels)
+    opt.part_deltas = torch.nn.Parameter(best)
+    opt.part_deltas.requires_grad_(True)
+    opt.part_optimizer = torch.optim.Adam([opt.part_deltas], lr=opt.config.pose_lr)
+    opt.prev_part_deltas = best
 
 
 def _swing_twist(R_err, axis):
@@ -72,7 +107,10 @@ def run(config: str) -> None:
     c0 = np.asarray(info["centroid"], float)
     axis = np.r_[1.0, 0, 0]
     out = []
-    for p in sorted(glob.glob(os.path.join(SEQ, "grasp_*.npz"))):
+    files = sorted(glob.glob(os.path.join(SEQ, "grasp_*.npz")))
+    if ROI_INIT:
+        files = [f for f in files if os.path.basename(f) in {f"grasp_+15_s{i}.npz" for i in range(5)}]
+    for p in files:
         z = np.load(p)
         name = os.path.splitext(os.path.basename(p))[0]
         cam = ns_camera(z["c2w_cv"], z["K"], z["width"], z["height"], info["dataset_scale"])
@@ -82,7 +120,9 @@ def run(config: str) -> None:
         for k in range(len(z["frame"])):
             rgb = torch.from_numpy(z["rgb"][k]).float().cuda() / 255.0
             depth = torch.from_numpy(z["depth"][k]).float().cuda()          # (H, W): official Frame adds the channel
-            if k == 0:
+            if k == 0 and ROI_INIT:
+                roi_initialize(opt, rgb, depth, cam, dino_fn)
+            elif k == 0:
                 opt.set_frame(Frame(rgb=rgb, camera=cam.to("cuda"), dino_fn=dino_fn, metric_depth_img=depth))
                 opt.initialize_obj_pose(niter=100, n_seeds=7)
             else:
@@ -112,7 +152,8 @@ def run(config: str) -> None:
         out.append(dict(case=name, rows=rows))
         opt.reset_transforms()
     json.dump({"setup": info, "config": config, "cases": out},
-              open(os.path.join(OUT, "official_track_probe.json" if PROBE else "official_track.json"), "w"))
+              open(os.path.join(OUT, "official_track_or5.json" if ROI_INIT else
+                                "official_track_probe.json" if PROBE else "official_track.json"), "w"))
 
 
 def summarise() -> None:
