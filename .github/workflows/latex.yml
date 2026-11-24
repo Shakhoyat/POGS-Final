@@ -1,0 +1,31 @@
+name: Compile LaTeX report
+on:
+  push:
+    paths:
+      - "docs/report/**.tex"
+      - "docs/report/figs/**"
+      - ".github/workflows/latex.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile progress_report.tex
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: progress_report.tex
+          working_directory: docs/report
+      - uses: actions/upload-artifact@v4
+        with:
+          name: progress_report
+          path: docs/report/progress_report.pdf
+      - name: Commit the PDF back to the branch
+        run: |
+          git config user.name "latex-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f docs/report/progress_report.pdf
+          git diff --cached --quiet || git commit -m "CI: compiled progress_report.pdf [skip ci]"
+          git push

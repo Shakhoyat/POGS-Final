@@ -623,10 +623,23 @@ def variant_config(base: TrackingConfig, variant: str) -> TrackingConfig:
     No DINO                     paper ablation: 'optimized with RGB
                                 substituting for DINO features'
     N iters                     POGS with N optimiser steps per frame
+    DINO in object              not in the release: DINO term only inside the
+                                object rendered at the evaluated pose
+                                (TrackingConfig.dino_loss_region="object")
+    DINO vs rendered background not in the release: background ROI pixels compared
+                                with the scene render, not 0
+                                (TrackingConfig.dino_background="rendered")
+    Depth only                  not in the release: DINO and RGB off (control)
     """
     tc = copy.deepcopy(base)
     if variant == "POGS":
         pass
+    elif variant == "DINO in object":
+        tc.dino_loss_region = "object"
+    elif variant == "DINO vs rendered background":
+        tc.dino_background = "rendered"
+    elif variant == "Depth only":
+        tc.use_dino, tc.use_rgb = False, False
     elif variant == "POGS (release: no per-frame depth)":
         tc.use_depth, tc.init_use_depth = False, True
     elif variant == "No Depth":

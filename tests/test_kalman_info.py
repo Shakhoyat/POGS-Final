@@ -124,3 +124,14 @@ def test_dino_loss_region_default_is_release_and_masks_apply():
 def test_dino_background_default_is_release():
     from model.pogs.config import TrackingConfig
     assert TrackingConfig().dino_background == "zero"
+
+
+def test_new_variants_only_change_their_field():
+    from model.pogs.config import TrackingConfig
+    from model.pogs.evaluate import variant_config
+    base = TrackingConfig()
+    assert variant_config(base, "DINO in object").dino_loss_region == "object"
+    assert variant_config(base, "DINO vs rendered background").dino_background == "rendered"
+    d = variant_config(base, "Depth only")
+    assert (d.use_dino, d.use_rgb, d.use_depth) == (False, False, base.use_depth)
+    assert base.dino_loss_region == "roi" and base.dino_background == "zero"
