@@ -1,0 +1,9 @@
+{
+ "venv": "/home/vscode/venvs/pogs-o5",
+ "written": "2026-11-22T19:43:21+06:00",
+ "skipped": {
+  "locateanything3d": "9.5 GB / 8-11 GB VRAM; old-stack number retained, labelled",
+  "detic": "detectron2 not buildable on py3.12 / torch 2.14; old-stack number retained, labelled",
+  "vfmdetr": "no public code or weights found: two web searches on 2026-11-17 returned only unrelated papers (VFMTok, RT-DETRv4); the paper itself was not located, so this is not exhaustive"
+ }
+}
