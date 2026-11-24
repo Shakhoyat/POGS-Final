@@ -1,0 +1,71 @@
+{
+  "environment": {
+    "python": "3.12.16",
+    "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "torch": "2.14.1+cu130",
+    "cuda_available": true,
+    "cuda": "13.0",
+    "gpu": "NVIDIA GeForce RTX 4070",
+    "gpu_total_mb": 12282,
+    "cudnn": 92400
+  },
+  "scene": "pickplace",
+  "protocol": {
+    "warmup": 20,
+    "iters": 100,
+    "cudnn_benchmark": true,
+    "synchronize": true,
+    "seed": 42,
+    "scene_resolution": "1280x720"
+  },
+  "measurements": [
+    {
+      "model": "siglip2",
+      "stage": "alignment",
+      "pogs_uses": true,
+      "open_vocab": true,
+      "loader": "transformers",
+      "spec": "google/siglip2-base-patch16-224",
+      "dtype": "fp32",
+      "resolution": "224x224",
+      "scene_resolution": "1280x720",
+      "device": "cuda",
+      "load_s": 26.01,
+      "params": 375187970,
+      "median_ms": 12.45,
+      "mean_ms": 12.555,
+      "p95_ms": 16.914,
+      "min_ms": 6.746,
+      "max_ms": 18.637,
+      "peak_delta_mb": 115.2,
+      "iters": 100,
+      "status": "ok"
+    },
+    {
+      "model": "siglip2",
+      "stage": "alignment",
+      "pogs_uses": true,
+      "open_vocab": true,
+      "loader": "transformers",
+      "spec": "google/siglip2-base-patch16-224",
+      "dtype": "fp16",
+      "resolution": "224x224",
+      "scene_resolution": "1280x720",
+      "device": "cuda",
+      "load_s": 1.17,
+      "params": 375187970,
+      "precision_mode": "autocast",
+      "median_ms": 18.683,
+      "mean_ms": 18.33,
+      "p95_ms": 20.554,
+      "min_ms": 12.678,
+      "max_ms": 24.283,
+      "peak_delta_mb": 287.0,
+      "iters": 100,
+      "status": "ok"
+    }
+  ],
+  "total_pipeline_median_ms_fp16": 12.45,
+  "measured_models": 2,
+  "blocked_models": 0
+}

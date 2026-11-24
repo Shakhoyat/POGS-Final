@@ -2,11 +2,15 @@
   "clip_vitb16": {
     "open_clip_config.json": {
       "bytes": 469,
+      "downloaded": "2026-11-22T19:28:00",
+      "sha256": "86d418d7046fa9212ab70eb7cb3deeef02be46f39d7948bad5dc7649f8277208",
       "status": "present",
       "url": "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_config.json"
     },
     "open_clip_pytorch_model.bin": {
       "bytes": 598529951,
+      "downloaded": "2026-11-22T19:27:53",
+      "sha256": "1f16b1274ca25493b1f36225efe81d05f66a3f33c487acd1a07c5ba87920de6f",
       "status": "present",
       "url": "https://huggingface.co/laion/CLIP-ViT-B-16-laion2B-s34B-b88K/resolve/main/open_clip_pytorch_model.bin"
     },
@@ -51,6 +55,8 @@
   "dino_vits14": {
     "dinov2_vits14_pretrain.pth": {
       "bytes": 88283115,
+      "downloaded": "2026-11-22T19:27:40",
+      "sha256": "b938bf1bc15cd2ec0feacfe3a1bb553fe8ea9ca46a7e1d8d00217f29aef60cd9",
       "status": "present",
       "url": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_pretrain.pth"
     },
@@ -58,18 +64,16 @@
   },
   "dinov3": {
     "config.json": {
-      "bytes": 744,
-      "downloaded": "2026-10-15T02:21:21",
-      "sha256": "3c9cc418f4622fd6d5587fd142b6f3cba0ba6a69f67ced907d8b7f26118451ec",
-      "status": "present",
+      "bytes": null,
+      "status": "gated",
       "url": "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m/resolve/main/config.json"
     },
     "model.safetensors": {
-      "bytes": 342662192,
-      "status": "present",
+      "bytes": null,
+      "status": "gated",
       "url": "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m/resolve/main/model.safetensors"
     },
-    "status": "present"
+    "status": "absent"
   },
   "locateanything3d": {
     "added_tokens.json": {
@@ -226,11 +230,15 @@
   "mobileclipv2": {
     "open_clip_config.json": {
       "bytes": 731,
+      "downloaded": "2026-11-22T19:28:23",
+      "sha256": "5c0765835a130d746e8818aaab1b1528eb2c87724cef14acaabe9a9dd3f2fc01",
       "status": "present",
       "url": "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_config.json"
     },
     "open_clip_pytorch_model.bin": {
       "bytes": 599240011,
+      "downloaded": "2026-11-22T19:28:17",
+      "sha256": "50dded4edfc94f26161e92a7bea8279ce2781caeb67eb44980f5cf5cd9b48425",
       "status": "present",
       "url": "https://huggingface.co/timm/MobileCLIP2-B-OpenCLIP/resolve/main/open_clip_pytorch_model.bin"
     },
@@ -239,11 +247,15 @@
   "rfdetr": {
     "config.json": {
       "bytes": 5761,
+      "downloaded": "2026-11-22T19:34:17",
+      "sha256": "f8ea7352ab0f6d109fe013c114342e43e70e8f6f83f6a018d5e53583f824ce34",
       "status": "present",
       "url": "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/config.json"
     },
     "model.safetensors": {
       "bytes": 128757944,
+      "downloaded": "2026-11-22T19:34:14",
+      "sha256": "02ad73fd09f0c241db299eaa9ebb50c166516f18e8f2cb9730f09039172fde2d",
       "status": "present",
       "url": "https://huggingface.co/Roboflow/rf-detr-base/resolve/main/model.safetensors"
     },
@@ -252,21 +264,21 @@
   "siglip2": {
     "config.json": {
       "bytes": 253,
-      "downloaded": "2026-10-14T19:15:31",
+      "downloaded": "2026-11-22T19:29:06",
       "sha256": "fe8b5fe6d5734360678fd71c11c21e1ea3364bd8598d34295d9206335973ffd7",
       "status": "present",
       "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/config.json"
     },
     "model.safetensors": {
       "bytes": 1500800904,
-      "downloaded": "2026-10-14T19:15:28",
+      "downloaded": "2026-11-22T19:28:54",
       "sha256": "612923381c76ec5a9bed335d1c48827e3f2e506ac31b044b63b2031fadee6a0b",
       "status": "present",
       "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/model.safetensors"
     },
     "preprocessor_config.json": {
       "bytes": 394,
-      "downloaded": "2026-10-14T19:15:33",
+      "downloaded": "2026-11-22T19:29:08",
       "sha256": "9b36b57ebaf20f09bf4c22100ccc21877ea6bfe5aead0c00c59f8af8ccefacfc",
       "status": "present",
       "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/preprocessor_config.json"
@@ -274,14 +286,14 @@
     "status": "present",
     "tokenizer.json": {
       "bytes": 34363039,
-      "downloaded": "2026-10-14T19:15:36",
+      "downloaded": "2026-11-22T19:29:12",
       "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322",
       "status": "present",
       "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/tokenizer.json"
     },
     "tokenizer_config.json": {
       "bytes": 47164,
-      "downloaded": "2026-10-14T19:15:38",
+      "downloaded": "2026-11-22T19:29:14",
       "sha256": "14afe629fe4959b9e0d51e1852b8d9f7ad074f90a1a7125a4fcdd17f06e78fc8",
       "status": "present",
       "url": "https://huggingface.co/google/siglip2-base-patch16-224/resolve/main/tokenizer_config.json"
@@ -291,7 +303,7 @@
     "status": "present",
     "yolo11x.pt": {
       "bytes": 114636239,
-      "downloaded": "2026-10-15T03:33:05",
+      "downloaded": "2026-11-22T19:34:08",
       "sha256": "7bc158aa95c0ebfdd87f70f01653c1131b93e92522dbe15c228bcd742e773a24",
       "status": "present",
       "url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt"
