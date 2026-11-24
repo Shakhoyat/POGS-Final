@@ -24,23 +24,19 @@
 \begin{abstract}
 Robots increasingly track objects by rendering a Gaussian splat with distilled DINO features and matching it to
 the live image. Such trackers report high recovery rates for tools under perturbation. We re-implement one of them,
-POGS, in a simulator with exact ground truth, and find that its published recovery rule leaves roll about the tool
-axis free and hides a systematic roll error of $9.5\pm2.8^\circ$ that is present before any perturbation. Under a
-full rotation rule recovery falls from 17--39 to 2--14 of 50 trials, and a relative rule is passed by a tracker that
-never moves. The error is not an optimisation failure: the loss itself prefers the wrong pose. We trace it to an
-implicit silhouette term inside the region-of-interest feature loss, which compares background pixels with an empty
-render. Its pose gradient is a boundary term that rewards silhouettes covering high-norm live features; a
-pre-registered test shows that this term predicts the sign of the bias in all 48 strongly biased conditions and its
-rank across 60 (Spearman 0.80), mostly through how much background a rotation uncovers rather than where the shadow
-lies. On three independently trained splats the roll minimum
-follows the gripper's shadow strength (Spearman $\rho\le-0.85$, shifts of 5--9$^\circ$), a rendered background removes
-the dependence, and the objective of a second tracker (RSRD) shows the same bias. The official POGS code, trained and
-evaluated on the same capture, does not show the large bias ($+2^\circ$; pre-registered test failed); swapping splats
-between the two pipelines places the difference in how the splat is trained, not in the tracking objective, so the
-bias's magnitude depends on the trained splat. Pre-registered tests refute our own
-first explanation, that the term supplies the restoring force, and six corrections fail a criterion fixed in
-advance. We propose evaluation rules with a reference implementation, and an extension plan: the official code, real
-captures with a controlled lamp, and an explicit shadow-free silhouette term.
+POGS, in a simulator with exact ground truth, train and run the official code on the same capture, and find that
+the published recovery rule leaves roll about the tool axis free while both trackers carry a large roll error before
+the gripper even touches the tool ($17^\circ$ ours, $19^\circ$ official; the two trajectories agree within
+$0.7^\circ$). Under a full rotation rule recovery falls from 17--39 to 2--14 of 50 trials, and a relative rule is
+passed by a tracker that never moves. The cause lies in how the feature loss is assembled: averaged over a region of
+interest against an object-only render, it contains an implicit silhouette term. Its roll landscape is nearly flat
+(under 0.5\% change over $\pm40^\circ$) and asymmetric, and a descending gripper tilts it toward large roll, so the
+estimate slides at the optimiser's step limit. On our splats the same term also creates a static, shadow-driven
+offset ($-10^\circ$, a dose-response on three splats, a pre-registered boundary-gradient prediction of its sign in
+48 of 48 cases); the official splat does not show this offset, and swapping splats shows that the tracking objectives
+agree while the splats differ. We report every pre-registered test: 17 of 27 predictions fail, including our first
+explanation, and six corrections and an initialisation fix do not remove the error. We propose evaluation rules with a reference implementation and an extension
+plan with real captures under a controlled lamp.
 \end{abstract}
 
 \IEEEpeerreviewmaketitle
@@ -65,14 +61,16 @@ rotation error, and what part of its objective causes it? \textbf{Hypotheses.}
 \textbf{H2} (mechanism): the bias is carried by the background part of the ROI loss, not by the object features.
 \textbf{H3} (cause): the bias follows the cast shadow in a dose-dependent way, on independently trained splats and in
 a second tracker's objective. \textbf{H4} (a hypothesis we held and tested): the background term supplies most of the
-static restoring force, which would explain why removing it breaks tracking.
+static restoring force, which would explain why removing it breaks tracking. \textbf{H5} (reproduction): the error
+and its mechanism appear with the official code.
 
-\textbf{Contributions.} (1)~An evaluation finding with a null-model check (H1). (2)~A mechanism: an implicit
-silhouette term, a first-order analysis of its pose gradient tested by a pre-registered prediction, and
-term-by-term evidence (H2). (3)~A shadow
-dose-response replicated on three splats and in RSRD's objective (H3). (4)~Negative results with criteria fixed in
-advance: H4 is refuted and six corrections fail. (5)~Evaluation rules with code. All tests after the initial
-diagnosis were pre-registered in timestamped documents before any result existed.
+\textbf{Contributions.} (1)~An evaluation finding with a null-model check, reproduced with the official code
+(H1, H5). (2)~A mechanism: an implicit silhouette term whose flat, asymmetric roll landscape is tilted by an occluding
+gripper (both pipelines), with a first-order analysis of its pose gradient tested by a pre-registered prediction (H2).
+(3)~A static shadow dose-response on our splats, bounded by pre-registered tests: absent with the official splat and
+with scene self-shadows only (H3). (4)~Negative results with criteria fixed in advance: H4 refuted, six corrections
+and an initialisation fix fail. (5)~Evaluation rules with code. All tests after the initial diagnosis were
+pre-registered in timestamped documents before any result existed.
 
 \section{Related work}
 \textbf{Feature-field tracking.} RSRD~\cite{kerr2024rsrd} recovers part motion from monocular video by optimising
@@ -113,8 +111,21 @@ estimate and a $-$ one away from it, which explains why $+$ settings recover mor
 (``back to the pre-perturbation error'') is passed by Static in 7--9 of 21--29 trials when the perturbation aligns
 with this error and never (0 of 21--29) when it opposes it. A Kalman motion prior does not change any of this: a filter models zero-mean scatter, not a bias. The official
 POGS tracking loop, trained and run on the same frames (pre-registered), shows the error too and more strongly: a
-median $|\text{roll}|$ of $19.4^\circ$ at the end of the approach (rule $\ge5^\circ$, pass; negative in 20 of 20
-sequences; Static $0^\circ$), growing from $-7^\circ$ after initialisation as the gripper descends.
+median $|\text{roll}|$ of $19.4^\circ$ at the end of the approach (rule $\ge5^\circ$, pass; Static $0^\circ$), growing
+from $-7^\circ$ after initialisation as the gripper descends. Our release-configured tracker follows the same
+trajectory (median difference $0.7^\circ$ over the approach frames, Spearman 0.87); the O4 seeds share one approach,
+so this is one trajectory, repeated. Replacing the official whole-image first initialisation stage with an ROI loss
+does not change it (pre-registered; $-7.8^\circ$ after initialisation, $-19.7^\circ$ at the end of the approach).
+
+\textbf{Why the estimate drifts.} Fig.~\ref{fig:landscape} sweeps roll over $\pm60^\circ$ at the true pose on the
+approach frames. For both splats the loss is steep for positive roll and nearly flat for negative roll; as the
+gripper descends its minimum moves to large negative roll, although the truth stays the minimum within a few degrees
+(the official loss prefers the truth to the tracker's estimate on 40 of 60 approach frames). With Adam's normalised
+steps the estimate then moves at about its step limit, $4$--$5^\circ$ per frame, which is the observed drift.
+\begin{figure}[t]\centering\includegraphics[width=\linewidth]{figs/roll_landscape.pdf}
+\caption{Roll landscape of the ROI feature loss at the true pose over the approach (exploratory). As the gripper
+descends (frames 2--3) the loss slopes toward large negative roll for both the official and our splat.}
+\label{fig:landscape}\end{figure}
 \begin{figure}[t]\centering\includegraphics[width=\linewidth]{figs/o4_roll_trace.pdf}
 \caption{Median roll about the bit axis and swing of the axis over the in-grasp trials (200 trials). The roll error
 exists before the perturbation.}\label{fig:roll}\end{figure}
@@ -165,10 +176,9 @@ rendered silhouette alone vs.\ measured roll argmin, 60 conditions on three spla
 $0.5^\circ$ and 0.5\,mm of it in all 8 sweeps. (ii)~The object features are unbiased:
 restricted to the true-pose mask, the DINO minimum is within $1^\circ$ of the truth in all 16 views. (iii)~The full ROI
 minimum sits at $-10^\circ$ at the tracking camera with the gripper's shadow, $-6^\circ$ without the gripper and $-2^\circ$
-with shadows off (Fig.~\ref{fig:argmin}). (iv)~With a rendered background instead of an empty one the minimum moves
+with shadows off. (iv)~With a rendered background instead of an empty one the minimum moves
 from $-10^\circ$ to $+2^\circ$, and the held-out-view mean $|$argmin$|$ falls from $3.7^\circ$ to $1.3^\circ$.
-\begin{figure}[t]\centering\includegraphics[width=\linewidth]{figs/finding_argmin.pdf}
-\caption{Roll at the minimum of each loss term, drill at the true pose, across views and lighting.}\label{fig:argmin}\end{figure}
+
 
 \section{H3: a shadow dose-response that replicates}\label{sec:g1}
 We pre-registered five predictions before any sweep: three splats of the tool scene trained with different seeds;

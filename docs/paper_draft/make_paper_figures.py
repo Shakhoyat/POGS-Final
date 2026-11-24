@@ -66,7 +66,30 @@ def torque(out_dir=OUT):
     plt.close(fig)
 
 
+def landscape(out_dir=OUT):
+    """F1x (exploratory): roll landscape of the ROI DINO loss at the true pose, approach frames 0-3, both splats."""
+    d = json.load(open("data_results/f1_floor/f1x_wide.json"))
+    g = np.asarray(d["grid_deg"])
+    fig, axs = plt.subplots(1, 2, figsize=(6.8, 2.1), sharey=True)
+    cols = [GREY, "#9fc1ea", S1, "#123f7a"]
+    for ax, sp, title in zip(axs, ("official", "ours_seed0"), ("official POGS splat", "our splat (seed 0)")):
+        for r in [r for r in d["rows"] if r["splat"] == sp]:
+            L = np.asarray(r["L"])
+            ax.plot(g, (L - L[np.argmin(abs(g))]) * 1e3, color=cols[r["frame"]], lw=1.3, label=f"frame {r['frame']}")
+        ax.axvline(0, color=GREY, lw=0.6, ls=":")
+        ax.axhline(0, color=GREY, lw=0.6, ls="--")
+        ax.set_title(title, fontsize=8, color=INK2)
+        ax.set_xlabel("roll about the bit axis (°)")
+    axs[0].set_ylabel("L − L(truth)  (×10⁻³)")
+    h, lab = axs[0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=4, fontsize=7)
+    fig.savefig(f"{out_dir}/roll_landscape.pdf", bbox_inches="tight")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
+    landscape()
+    landscape("docs/paper_rss/figs")
     dose()
     torque()
     torque("docs/paper_rss/figs")
