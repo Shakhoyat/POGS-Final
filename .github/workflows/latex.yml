@@ -1,37 +1,20 @@
-name: Compile LaTeX report
+name: Compile LaTeX (check only; PDFs are built locally with tools/build_tex.sh and committed)
 on:
   push:
     paths:
       - "docs/report/**.tex"
-      - "docs/report/figs/**"
+      - "docs/paper_draft/**"
       - ".github/workflows/latex.yml"
   workflow_dispatch:
-permissions:
-  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        doc: [{dir: docs/report, root: progress_report.tex}, {dir: docs/paper_draft, root: main.tex}]
     steps:
       - uses: actions/checkout@v4
-      - name: Compile progress_report.tex
-        uses: xu-cheng/latex-action@v3
+      - uses: xu-cheng/latex-action@v3
         with:
-          root_file: progress_report.tex
-          working_directory: docs/report
-      - uses: actions/upload-artifact@v4
-        with:
-          name: progress_report
-          path: docs/report/progress_report.pdf
-      - name: Page previews and overfull-box check
-        run: |
-          sudo apt-get install -y -qq poppler-utils
-          mkdir -p docs/report/preview && rm -f docs/report/preview/*.png
-          pdftoppm -r 70 -png docs/report/progress_report.pdf docs/report/preview/page
-          grep -E "Overfull|undefined|Warning" docs/report/progress_report.log > docs/report/preview/latex_warnings.txt || true
-      - name: Commit the PDF back to the branch
-        run: |
-          git config user.name "latex-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add -f docs/report/progress_report.pdf docs/report/preview
-          git diff --cached --quiet || git commit -m "CI: compiled progress_report.pdf + previews [skip ci]"
-          git push
+          root_file: ${{ matrix.doc.root }}
+          working_directory: ${{ matrix.doc.dir }}

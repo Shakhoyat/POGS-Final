@@ -12,6 +12,7 @@
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,fit,calc}
+\usepackage{float}
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{enumitem}
@@ -47,7 +48,7 @@
 
 %==========================================================================
 \section*{Summary}
-\begin{table}[h]
+\begin{table}[H]
 \centering\small
 \begin{tabularx}{\linewidth}{@{}l X l X l l@{}}
 \toprule
@@ -69,7 +70,7 @@ Beyond the requirements, Section~\ref{sec:further} identifies why R4 is not met:
 
 %==========================================================================
 \section{R1: Object grouping features}\label{sec:r1}
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.56\linewidth}\centering
 \includegraphics[width=\linewidth]{\figdir/o1_renders.jpg}
@@ -84,24 +85,27 @@ Beyond the requirements, Section~\ref{sec:further} identifies why R4 is not met:
 
 %==========================================================================
 \section{R2: Project structure and environment}\label{sec:r2}
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}[font=\small,
   grp/.style={draw=inktwo,rounded corners=2pt,fill=sOne!8,minimum height=6mm,inner sep=3pt},
-  leaf/.style={align=left,font=\footnotesize\ttfamily,inner sep=1pt},
+  leaf/.style={align=left,font=\scriptsize\ttfamily,inner sep=1pt},
   ar/.style={-{Stealth[length=2mm]},draw=inktwo}]
 \node[grp] (m) at (0,0) {\textbf{Model}};
-\node[grp] (d) at (6.2,0) {\textbf{Data}};
-\node[grp] (me) at (11.2,0) {\textbf{Metrics}};
+\node[grp] (d) at (6.0,0) {\textbf{Data}};
+\node[grp] (me) at (11.6,0) {\textbf{Metrics}};
 \node[leaf,below=3mm of m,anchor=north] (ml) {%
-Object detection:\ \ model/foundation\_study/ (Detic, RF-DETR, YOLO, \dots)\\
-Feature extraction: model/pogs/encoders.py (DINOv2)\\
-Feature alignment:\ \ model/pogs/encoders.py (CLIP)\\
-POGS:\ \ model/pogs/\{trainer, grouping, tracking\}.py};
+Detection: model/foundation\_study/\\
+Features:\ \ model/pogs/encoders.py\\
+Alignment: model/pogs/encoders.py\\
+POGS:\ \ \ \ \ \ model/pogs/trainer.py,\\
+\ \ \ \ \ \ \ \ \ \ \ grouping.py, tracking.py};
 \node[leaf,below=3mm of d,anchor=north] (dl) {%
-Scene generation:\\data/scene\_generator/\\(pick\_place\_benchmark.py,\\ tool\_perturbation.py)};
+Scenes: data/scene\_generator/\\
+\ \ pick\_place\_benchmark.py\\
+\ \ tool\_perturbation.py};
 \node[leaf,below=3mm of me,anchor=north] (mel) {%
-Gaussian: metrics/gaussian.py\\Pose:\ \ \ \ \ metrics/pose.py\\Statistics: metrics/stats.py};
+Gaussian:\ \ \ metrics/gaussian.py\\Pose:\ \ \ \ \ \ \ metrics/pose.py\\Statistics: metrics/stats.py};
 \draw[ar] (m) -- (ml); \draw[ar] (d) -- (dl); \draw[ar] (me) -- (mel);
 \end{tikzpicture}
 \caption{Repository layout mapped to the requested structure.}
@@ -121,7 +125,7 @@ Python & CUDA & PyTorch & torchmetrics & gsplat & Tests\\
 \section{R3: Tool perturbation recovery to \texorpdfstring{$30^\circ$}{30 degrees}}\label{sec:r3}
 Protocol as specified: splats $x$ at rest; rotate the drill in $+5^\circ$ (or $+10^\circ$, $+15^\circ$) steps to $30^\circ$ (state $p$); rotate back in equal steps to the original orientation (state $y$); compare $y$ with $x$ for splats and pose. Five trajectories per step size.
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.49\linewidth}\centering
 \includegraphics[width=\linewidth]{\figdir/o3_step_trace.pdf}
@@ -134,7 +138,7 @@ Protocol as specified: splats $x$ at rest; rotate the drill in $+5^\circ$ (or $+
 \caption{POGS follows the step sequence with less than $5^\circ$ error throughout. Static fails because each trial first moves the drill to a random start pose.}
 \end{figure}
 
-\begin{table}[h]
+\begin{table}[H]
 \centering\small
 \begin{tabular}{@{}l l c c c c c@{}}
 \toprule
@@ -153,7 +157,7 @@ all        & Static & 0/5 & $29.5^\circ$ & 8.66\,cm & 0 & 1478\\
 \section{R4: In-grasp tool perturbation recovery rate}\label{sec:r4}
 The drill is grasped, lifted and held; it is then rotated in the gripper by $\pm15^\circ$ or $\pm30^\circ$ about the grasp axis. Fifty trials per setting.
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.49\linewidth}\centering
 \includegraphics[width=\linewidth]{\figdir/o4_recovery.pdf}
@@ -166,7 +170,7 @@ The drill is grasped, lifted and held; it is then rotated in the gripper by $\pm
 \caption{The 80\% target is not met under either rule. Under the paper's rule, $+30^\circ$ matches the paper (39 vs 40, Fisher $p=1.0$); the other settings fall short ($p\le10^{-4}$). Static recovers 0/50 in every setting.}
 \end{figure}
 
-\begin{table}[h]
+\begin{table}[H]
 \centering\small
 \begin{tabular}{@{}l c c c c@{}}
 \toprule
@@ -183,7 +187,7 @@ $-30^\circ$ & 5/50 [0.04, 0.21]  & 17/50 [0.22, 0.48] & 40/50 & 729 / 9937\\
 
 %==========================================================================
 \section{R5: Latency of each 2D foundation model}\label{sec:r5}
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{minipage}[c]{0.44\linewidth}\centering
 \includegraphics[width=\linewidth]{\figdir/o5_latency.pdf}
@@ -212,7 +216,7 @@ Alignment & CLIP ViT-B/16 & 11.8\\
 
 %==========================================================================
 \section{R6: Tracking frequency}\label{sec:r6}
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{minipage}[c]{0.48\linewidth}\centering
 \includegraphics[width=\linewidth]{\figdir/o6_speed.pdf}
@@ -224,7 +228,7 @@ Alignment & CLIP ViT-B/16 & 11.8\\
 
 %==========================================================================
 \section{Further progress: why the 80\% target is not met}\label{sec:further}
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}[font=\small,node distance=4mm and 9mm,
   bx/.style={draw=inktwo,rounded corners=2pt,align=center,inner sep=4pt,text width=3.6cm},
@@ -242,7 +246,7 @@ Alignment & CLIP ViT-B/16 & 11.8\\
 \caption{Mechanism of the roll error. Ground truth was verified exact; the drill's own features have their minimum within $1^\circ$ of the true pose in all 16 views tested.}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.49\linewidth}\centering
 \includegraphics[width=\linewidth]{\figdir/finding_argmin.pdf}

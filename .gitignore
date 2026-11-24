@@ -90,3 +90,14 @@ data_results/_pipeline/pid
 
 # Reference papers: local only (index in ref-paper/README.md)
 ref-paper/*.pdf
+
+# LaTeX build files
+docs/**/*.aux
+docs/**/*.log
+docs/**/*.out
+docs/**/*.bbl
+docs/**/*.blg
+docs/**/*.fls
+docs/**/*.fdb_latexmk
+docs/**/*.synctex.gz
+docs/report/preview/
