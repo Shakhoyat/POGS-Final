@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compile the LaTeX documents with the user-level TinyTeX (~/.TinyTeX). Usage: tools/build_tex.sh [report|paper|all]
+# Compile the LaTeX documents with the user-level TinyTeX (~/.TinyTeX). Usage: tools/build_tex.sh [report|paper|rss|all]
 set -u
 export PATH="$(echo ~/.TinyTeX/bin/*):$PATH"
 cd "$(dirname "$0")/.."
@@ -14,5 +14,6 @@ build() {  # dir root
 case "${1:-all}" in
   report) build docs/report progress_report ;;
   paper)  build docs/paper_draft main ;;
-  all)    build docs/report progress_report; build docs/paper_draft main ;;
+  rss)    build docs/paper_rss main ;;
+  all)    build docs/report progress_report; build docs/paper_draft main; build docs/paper_rss main ;;
 esac

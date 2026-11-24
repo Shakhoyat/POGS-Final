@@ -22,6 +22,9 @@ export PATH=$V/bin:$CUDA_HOME/bin:$PATH
 PYINC=$($PY -c 'import sysconfig;print(sysconfig.get_paths()["include"])')
 [ -f "$PYINC/Python.h" ] && export CPATH=$PYINC || export CPATH="$ROOT/.venv/sysinclude/usr/include/python3.12:$ROOT/.venv/sysinclude/usr/include"
 export TORCH_CUDA_ARCH_LIST=8.9 TCNN_CUDA_ARCHITECTURES=89 MAX_JOBS=16
+# glibc >= 2.41 declares rsqrt/rsqrtf noexcept; CUDA 13.0's crt/math_functions.h does not -> nvcc error in tcnn.
+H=$CUDA_HOME/include/crt/math_functions.h
+grep -q "rsqrt(double x) noexcept" "$H" || sed -i.orig -e 's/\(double *rsqrt(double x)\);/\1 noexcept (true);/' -e 's/\(float *rsqrtf(float x)\);/\1 noexcept (true);/' "$H"
 echo "== nerfstudio (official submodule 5003d0e)"; uvp -q -e "$OFF/pogs/dependencies/nerfstudio"
 echo "== gsplat, warp, extras"; uvp -q "gsplat==1.5.3" warp-lang jaxtyping rich "fast_simplification==0.1.9" scikit-learn hdbscan
 echo "== pogs (official, editable)"; uvp -q -e "$OFF"
