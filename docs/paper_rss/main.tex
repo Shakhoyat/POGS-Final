@@ -121,7 +121,9 @@ does not change it (pre-registered; $-7.8^\circ$ after initialisation, $-19.7^\c
 approach frames. For both splats the loss is steep for positive roll and nearly flat for negative roll; as the
 gripper descends its minimum moves to large negative roll, although the truth stays the minimum within a few degrees
 (the official loss prefers the truth to the tracker's estimate on 40 of 60 approach frames). With Adam's normalised
-steps the estimate then moves at about its step limit, $4$--$5^\circ$ per frame, which is the observed drift.
+steps the estimate then moves at about its step limit, $4$--$5^\circ$ per frame, which is the observed drift. Once
+the gripper holds the drill the loss decreases monotonically toward $-60^\circ$ for both splats; per-frame depth
+resists this only partly (on our splat), consistent with the depth-using configuration drifting least.
 \begin{figure}[t]\centering\includegraphics[width=\linewidth]{figs/roll_landscape.pdf}
 \caption{Roll landscape of the ROI feature loss at the true pose over the approach (exploratory). As the gripper
 descends (frames 2--3) the loss slopes toward large negative roll for both the official and our splat.}

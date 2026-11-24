@@ -14,12 +14,12 @@ OUT = "data_results/f1_floor"
 GRID = np.arange(-60.0, 60.0 + 1e-9, 1.0)
 
 
-def run(name, ctx, device="cuda:0"):
+def run(name, ctx, device="cuda:0", frames=range(4)):
     tcfg = variant_config(ctx["cfg"].tracking, "POGS")
     seq = load_sequence(TOOL_DATASET_DIR, "grasp_+15_s0", lazy=True)
     cam = tracking_camera(seq.camera, tcfg, device)
     rows = []
-    for fi in range(4):
+    for fi in frames:
         fr = seq.frames[fi]
         opt = _optimizer(ctx, tcfg)
         obs = _obs(fr.rgb.float().to(device), fr.depth.float().to(device), cam, ctx, tcfg, opt)
@@ -35,6 +35,9 @@ def run(name, ctx, device="cuda:0"):
 
 
 def main():
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "lift":
+        return main_lift()
     os.makedirs(OUT, exist_ok=True)
     rows = []
     c, _ = official_ctx()
@@ -43,6 +46,17 @@ def main():
     cfg, model, dino, grouping = load_splat(0)
     rows += run("ours_seed0", _ctx(cfg, model, dino, grouping, DRILL_ID))
     json.dump({"grid_deg": GRID.tolist(), "rows": rows}, open(os.path.join(OUT, "f1x_wide.json"), "w"))
+
+
+def main_lift():
+    """Exploratory: same sweep on the lift frames 4-9 (gripper holding and lifting the drill), true pose."""
+    rows = []
+    c, _ = official_ctx()
+    rows += run("official", c, frames=range(4, 10))
+    del c; torch.cuda.empty_cache()
+    cfg, model, dino, grouping = load_splat(0)
+    rows += run("ours_seed0", _ctx(cfg, model, dino, grouping, DRILL_ID), frames=range(4, 10))
+    json.dump({"grid_deg": GRID.tolist(), "rows": rows}, open(os.path.join(OUT, "f1x_wide_lift.json"), "w"))
 
 
 if __name__ == "__main__":

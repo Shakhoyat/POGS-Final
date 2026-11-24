@@ -161,6 +161,12 @@ no blur). This corrects the earlier wording "the shadow on one side produces a t
   is one route to it (our splats); the official splat reaches the same error by drift. F1 tests where the shared
   drift starts (whole-image init loss vs descending gripper).
 
+## 5g. The shared drift (exploratory, `data_results/f1_floor/f1x_wide*.json`, Fig. `roll_landscape.pdf`)
+Roll sweeps over ±60° at the true pose: the ROI DINO loss is nearly flat (< 0.5% over ±40°) and asymmetric (steep for
++roll). As the gripper descends (approach frames 2–3) its minimum moves to large negative roll, and once the gripper
+holds the drill (lift) it decreases monotonically toward −60°, for both the official and our splat. The estimate slides
+at Adam's step limit (≈ 4–5°/frame). OR5 (ROI-only init) FAIL: the initialisation is not the cause.
+
 ## 6. Recommendations for tool-tracking evaluation (to finalise)
 1. Report the tool-axis rule and the full-rotation rule side by side, and say which DOF a rule leaves free.
 2. Score every recovery metric for Static. Do not use relative-to-pre-perturbation rules, or stratify them by
