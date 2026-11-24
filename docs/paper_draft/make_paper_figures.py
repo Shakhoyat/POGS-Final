@@ -45,6 +45,29 @@ def dose():
     plt.close(fig)
 
 
+def torque(out_dir=OUT):
+    """E4: predicted (boundary term, -T/2k) vs measured roll argmin, 60 conditions, 3 splats."""
+    rows = []
+    for p in sorted(glob.glob("data_results/e4_torque/torque_seed*.json")):
+        rows += [r for r in json.load(open(p))["rows"] if r["axis"] == "x"]
+    fig, ax = plt.subplots(figsize=(3.4, 2.3))
+    style = {"dose": (S2, "o", "tracking cam., gripper, shadow sweep"), "track": (GREY, "s", "tracking cam., no gripper"),
+             "ring": (S1, "^", "held-out views")}
+    for kind, (c, mk, lab) in style.items():
+        sub = [r for r in rows if r["kind"] == kind]
+        ax.scatter([r["pred"]["g"] for r in sub], [r["argmin"] for r in sub], s=14, c=c, marker=mk, label=lab,
+                   edgecolors="none", alpha=0.9)
+    ax.axhline(0, color=GREY, lw=0.6, ls="--")
+    ax.axvline(0, color=GREY, lw=0.6, ls="--")
+    ax.set_xlabel("predicted roll bias $-T/2\\kappa$ (°)")
+    ax.set_ylabel("measured roll argmin (°)")
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=1)
+    fig.savefig(f"{out_dir}/torque_scatter.pdf", bbox_inches="tight")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     dose()
+    torque()
+    torque("docs/paper_rss/figs")
     print("figures ->", OUT)

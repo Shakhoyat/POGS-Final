@@ -29,8 +29,10 @@ axis free and hides a systematic roll error of $9.5\pm2.8^\circ$ that is present
 full rotation rule recovery falls from 17--39 to 2--14 of 50 trials, and a relative rule is passed by a tracker that
 never moves. The error is not an optimisation failure: the loss itself prefers the wrong pose. We trace it to an
 implicit silhouette term inside the region-of-interest feature loss, which compares background pixels with an empty
-render. A boundary analysis shows that this term pulls the predicted silhouette toward high-norm live features, so a
-cast shadow on one side of the object produces a torque. On three independently trained splats the roll minimum
+render. Its pose gradient is a boundary term that rewards silhouettes covering high-norm live features; a
+pre-registered test shows that this term predicts the sign of the bias in all 48 strongly biased conditions and its
+rank across 60 (Spearman 0.80), mostly through how much background a rotation uncovers rather than where the shadow
+lies. On three independently trained splats the roll minimum
 follows the gripper's shadow strength (Spearman $\rho\le-0.85$, shifts of 5--9$^\circ$), a rendered background removes
 the dependence, and the objective of a second tracker (RSRD) shows the same bias. Pre-registered tests refute our own
 first explanation, that the term supplies the restoring force, and six corrections fail a criterion fixed in
@@ -63,7 +65,8 @@ a second tracker's objective. \textbf{H4} (a hypothesis we held and tested): the
 static restoring force, which would explain why removing it breaks tracking.
 
 \textbf{Contributions.} (1)~An evaluation finding with a null-model check (H1). (2)~A mechanism: an implicit
-silhouette term, a first-order analysis of its pose gradient, and term-by-term evidence (H2). (3)~A shadow
+silhouette term, a first-order analysis of its pose gradient tested by a pre-registered prediction, and
+term-by-term evidence (H2). (3)~A shadow
 dose-response replicated on three splats and in RSRD's objective (H3). (4)~Negative results with criteria fixed in
 advance: H4 is refuted and six corrections fail. (5)~Evaluation rules with code. All tests after the initial
 diagnosis were pre-registered in timestamped documents before any result existed.
@@ -131,12 +134,26 @@ transport theorem gives
 \end{equation}
 with $e_\text{in}$ the residual just inside the boundary. The first term is the region-competition flow of
 PWP3D-style trackers: the silhouette expands where the live background has a larger feature norm than the object
-residual and contracts elsewhere. Rotating a drill about its bit axis moves opposite sides of its silhouette in
-opposite directions, so any left--right asymmetry of $g$ along $\partial M$ produces a torque. A cast shadow lowers or
-raises $g$ on one side only; the minimum then moves until the boundary torque balances the object term. Replacing the
-empty render by a render of the static background replaces $g$ by $\lVert f-\hat f_\text{bg}\rVert$, which is small
-wherever the background is unchanged, and removes the torque from unchanged regions.
-Eq.~\eqref{eq:grad} is a first-order account; we test its predictions empirically below and plan a direct test.
+residual and contracts elsewhere. Rotating an asymmetric object such as a drill about its axis covers background
+on one side and uncovers it on the other, by unequal amounts; the term therefore produces a torque that grows with
+the feature norm of the surrounding background, and a cast shadow changes that norm. With the object term locally
+quadratic and unbiased, the minimum moves to $\hat a=-T/(2\kappa)$, where $T$ is the derivative of the background part
+at the true pose and $\kappa$ the curvature of $L$. Replacing the empty render by a render of the static background
+replaces $g$ by $\lVert f-\hat f_\text{bg}\rVert$, which is small wherever the background is unchanged, and removes the
+torque from unchanged regions.
+
+\textbf{Test of Eq.~\eqref{eq:grad} (pre-registered, E4).} We computed $T$ from the live features and the soft rendered
+silhouette alone, $B(\theta)=\frac1N\sum_p(1-\alpha_\theta(p))\,g(p)$, at $\pm1^\circ$, and compared $\hat a$ with the
+measured minimum in 60 conditions (three splats; six shadow strengths with the gripper, two frames without it, 12
+held-out views). The prediction ranks the measured bias (Spearman $0.80$, rule $\ge0.5$, pass) and has the correct sign
+in all 48 conditions with $|a|\ge2^\circ$ (rule $\ge75\%$, pass; Fig.~\ref{fig:torque}); it overestimates the magnitude
+by about $2\times$, as expected from a first-order term that ignores the blur of the render. A third rule fails: a
+predictor that keeps only the change of uncovered area, with $g$ replaced by its ROI mean, does almost as well
+(Spearman $0.76$; required gain $\ge0.2$, observed $0.04$). The bias is therefore driven mainly by how much background
+a rotation uncovers, weighted by the overall feature norm that the shadow sets, not by where the shadow lies.
+\begin{figure}[t]\centering\includegraphics[width=\linewidth]{figs/torque_scatter.pdf}
+\caption{Pre-registered test of the boundary term: predicted roll bias $-T/2\kappa$ from live features and the
+rendered silhouette alone vs.\ measured roll argmin, 60 conditions on three splats.}\label{fig:torque}\end{figure}
 
 \textbf{Evidence (term by term, at the true pose).} (i)~The ground truth is exact: RGB-only argmins lie within
 $0.5^\circ$ and 0.5\,mm of it in all 8 sweeps. (ii)~The object features are unbiased:
@@ -165,8 +182,8 @@ P5: rendered background moves $<$ half as much ($\geq2$/3) & pass (3/3)\\\bottom
 \end{tabular}\end{table}
 The bias and its shadow dependence replicate (Table~\ref{tab:g1}, Fig.~\ref{fig:dose}): Spearman $\rho=-0.97,-0.85,
 -0.85$ and shifts from $s=0$ to $s=1$ of $-8.0^\circ$, $-9.0^\circ$, $-5.0^\circ$, while the rendered-background loss
-moves by 0.5--1.5$^\circ$ and stays at $+2$ to $+4^\circ$. The direction agrees with Eq.~\eqref{eq:grad}: the shadow
-changes $g$ on one side of the silhouette only. P3 fails: the rendered background removes the shadow dependence but
+moves by 0.5--1.5$^\circ$ and stays at $+2$ to $+4^\circ$. In line with Eq.~\eqref{eq:grad}, the background torque $T$
+increases with $s$ (exploratory; Spearman 1.00, 1.00, 0.66 on the three splats). P3 fails: the rendered background removes the shadow dependence but
 not every view-dependent offset.
 
 \textbf{A second tracker's objective.} RSRD~\cite{kerr2024rsrd} builds its DINO loss the same way (object-only render,
@@ -221,8 +238,8 @@ images only, gives the dose axis.
 \textbf{E3: an explicit, shadow-free silhouette.} Replace the implicit term by a depth-foreground silhouette with the
 gripper's known geometry excluded, evaluated on held-out seeds against the same rule and a reference that receives
 the same exclusion.
-\textbf{E4: the boundary torque.} Test Eq.~\eqref{eq:grad} directly: compute the boundary torque from live features
-at the true pose and predict the sign and rank of the argmin shift across views and shadow strengths.
+\textbf{E4: beyond first order.} The first-order term ranks and signs the bias but overestimates it; we will add the
+blur of the render near the boundary and test the corrected magnitude on held-out splats.
 \textbf{E5: the dynamic failure.} Explain why tracking without the background term drifts in translation during the
 lift, which static sweeps do not show.
 

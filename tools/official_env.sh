@@ -34,6 +34,13 @@ if ! $PY -c "import tinycudann" 2>/dev/null; then
   [ -d "$HOME/third_party_pinned/tiny-cuda-nn" ] || git clone -q --recursive https://github.com/NVlabs/tiny-cuda-nn "$HOME/third_party_pinned/tiny-cuda-nn"
   # torch 2.14 headers require C++20; tcnn's setup.py pins C++17 for CUDA >= 11 (build flag only)
   sed -i.orig 's/^cpp_standard = 17$/cpp_standard = 20/; s/\t\t\tcpp_standard = 17$/\t\t\tcpp_standard = 20/' "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch/setup.py"
+  # fmt v9 (bundled) consteval format strings do not compile under nvcc + C++20: define FMT_CONSTEVAL empty
+  grep -q "DFMT_CONSTEVAL" "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch/setup.py" || python3 - "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch/setup.py" <<'PYEOF'
+import sys;p=sys.argv[1];s=open(p).read()
+s=s.replace('\t"-U__CUDA_NO_HALF2_OPERATORS__",\n]','\t"-U__CUDA_NO_HALF2_OPERATORS__",\n\t"-DFMT_CONSTEVAL=",\n]')
+s=s.replace('\tbase_cflags = [f"-std=c++{cpp_standard}"]','\tbase_cflags = [f"-std=c++{cpp_standard}", "-DFMT_CONSTEVAL="]')
+open(p,'w').write(s)
+PYEOF
   ( cd "$HOME/third_party_pinned/tiny-cuda-nn/bindings/torch" && uvp --no-build-isolation . )
 fi
 $PY -c "import tinycudann, torch; print('tcnn OK', torch.__version__)"

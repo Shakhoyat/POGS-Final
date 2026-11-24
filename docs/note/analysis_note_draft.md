@@ -111,6 +111,15 @@ minimum; it does not supply most of the local rotational stiffness.) The cast sh
 (−10° at the tracking camera). Inside the drill the features are unbiased at the truth but nearly flat within
 ±10°.
 
+## 5c. Boundary-term test (E4, pre-registered 2026-11-25, `data_results/e4_torque/summary.md`)
+First-order gradient of the ROI loss: a boundary term (1/N)∮(e_in − g)v_n ds with g the live feature norm.
+Predicted roll bias â = −T/2κ from live features and the soft rendered silhouette alone, 60 conditions on 3 splats.
+**E4a pass** (Spearman 0.80), **E4b pass** (sign correct in 48/48 conditions with |a| ≥ 2°), **E4c fail** (an
+area-only predictor with g replaced by its ROI mean reaches 0.76; required gain 0.2, observed 0.04). Reading: the
+bias follows how much background a rotation of the asymmetric drill uncovers, weighted by the overall background
+feature norm, which the shadow sets; where the shadow lies adds little. Magnitudes are overestimated ≈2× (first order,
+no blur). This corrects the earlier wording "the shadow on one side produces a torque" (RSS draft revised).
+
 ## 6. Recommendations for tool-tracking evaluation (to finalise)
 1. Report the tool-axis rule and the full-rotation rule side by side, and say which DOF a rule leaves free.
 2. Score every recovery metric for Static. Do not use relative-to-pre-perturbation rules, or stratify them by

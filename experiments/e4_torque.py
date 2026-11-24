@@ -167,7 +167,7 @@ def summarise() -> None:
     print("\n".join(L[:16]))
     print(f"FINDING: E4a | boundary-torque predictor vs measured roll argmin: Spearman {rg:+.2f} over {n} "
           f"conditions ({'pass' if E4a else 'FAIL'}, rule >= 0.5) | {OUT}/summary.md")
-    print(f"FINDING: E4b | sign agreement {sign:.0%} over {len(big)} conditions with |a|>=2 deg "
+    print(f"FINDING: E4b | sign agreement {sign:.0%} over {len(big)} conditions with abs(a)>=2 deg "
           f"({'pass' if E4b else 'FAIL'}, rule >= 75%) | {OUT}/summary.md")
     print(f"FINDING: E4c | spatial-asymmetry gain over constant-g predictor {rg - rc:+.2f} "
           f"({'pass' if E4c else 'FAIL'}, rule >= 0.2) | {OUT}/summary.md")
