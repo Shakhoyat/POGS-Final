@@ -219,3 +219,5 @@ Written by `tools/supervisor.sh harvest` from `FINDING:` lines in job logs. Pape
 | 2026-11-25 | E1a-PR3 | pruning over-covering drill Gaussians: PR3 FAIL | data_results/e1a_prune/summary.md | `data_results/_pipeline/e1a.log` | in: RSS official-code paragraph (pruning sentence) |
 | 2026-11-25 | F1a | whole-image init-loss roll argmin at frame 0: official -7.0, ours -12.0 (pass) | data_results/f1_floor/summary.md | `data_results/_pipeline/f1.log` | in: RSS §IV (init sentence) |
 | 2026-11-25 | F1b | ROI roll argmin at approach frames 1-3: official -3.0, ours -18.0 (FAIL) | data_results/f1_floor/summary.md | `data_results/_pipeline/f1.log` | in: ledger; RSS landscape paragraph notes grid limit |
+| 2026-11-25 | OR6a | official tracker roll-free recoveries 0/40 vs ours (release) 10/40 (FAIL) | data_results/off_repro/summary_or6.md | `data_results/_pipeline/off_or6.log` | pending |
+| 2026-11-25 | OR6b | official tracker roll-free 0/40 below 32/40 (pass) | data_results/off_repro/summary_or6.md | `data_results/_pipeline/off_or6.log` | pending |
