@@ -277,7 +277,8 @@ Official loss has the $-10^\circ$ roll minimum with the gripper's shadow & not m
 Official loss follows the shadow strength & not met ($\rho=0.00$)\\
 Official and our loss agree on 13 views without the gripper & met ($\rho=0.53$, median $2^\circ$)\\
 Official tracker has the roll error before the gripper touches the drill & met (median $19.4^\circ$; no-motion baseline $0^\circ$)\\
-An initialisation on the region around the drill removes it & not met\\\bottomrule
+An initialisation on the region around the drill removes it & not met\\
+Official tracker on 40 in-grasp trials (paper's rule) & 0/40 (no-motion 0/40; ours 10--24/40)\\\bottomrule
 \end{tabular}\end{table}
 \textbf{Reading.} Our tracker follows the official tracker's roll during the approach within a median of $0.7^\circ$, so the re-implementation is faithful. The roll error that the paper's rule ignores is real in the official code as well, and larger. Its common cause is a nearly flat, asymmetric roll landscape that the descending gripper tilts towards large negative roll (Fig.~\ref{fig:landscape}); the tracker slides at its step limit. The static, shadow-driven $-10^\circ$ offset of Section~\ref{sec:further} belongs to our splats only: swapping splats between the two pipelines shows the tracking objectives agree and the splats differ.
 \begin{figure}[H]\centering

@@ -15,7 +15,7 @@ the grouping heads only; one release bug worked around: eval passes off).
 | OR3: official and our argmins agree across 13 views without the gripper | pass (ρ 0.53, median 2°) |
 | OR4: official tracker has the roll error before contact | **pass** (median 19.4°; Static 0°) |
 | OR5: an ROI-only initialisation removes it | FAIL (−7.8° after init, −19.7° at end of approach) |
-| OR6: official tracker on 40 in-grasp trials, both rules | see `data_results/off_repro/summary_or6.md` |
+| OR6: official tracker on 40 in-grasp trials, both rules | 0/40 both rules (= Static); ours release 10/40, ours paper 24/40 roll-free. OR6a FAIL (differs from ours by 10), OR6b pass |
 
 Exploratory, decisive for interpretation:
 - **Our tracker reproduces the official trajectory**: over the approach the two trackers' roll differs by a median of

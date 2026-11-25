@@ -27,7 +27,7 @@ the live image. Such trackers report high recovery rates for tools under perturb
 POGS, in a simulator with exact ground truth, train and run the official code on the same capture, and find that
 the published recovery rule leaves roll about the tool axis free while both trackers carry a large roll error before
 the gripper even touches the tool ($17^\circ$ ours, $19^\circ$ official; the two trajectories agree within
-$0.7^\circ$). Under a full rotation rule recovery falls from 17--39 to 2--14 of 50 trials, and a relative rule is
+$0.7^\circ$), and the official tracker recovers none of 40 trials on our benchmark. Under a full rotation rule recovery falls from 17--39 to 2--14 of 50 trials, and a relative rule is
 passed by a tracker that never moves. The cause lies in how the feature loss is assembled: averaged over a region of
 interest against an object-only render, it contains an implicit silhouette term. Its roll landscape is nearly flat
 (under 0.5\% change over $\pm40^\circ$) and asymmetric, and a descending gripper tilts it toward large roll, so the
@@ -116,6 +116,9 @@ from $-7^\circ$ after initialisation as the gripper descends. Our release-config
 trajectory (median difference $0.7^\circ$ over the approach frames, Spearman 0.87); the O4 seeds share one approach,
 so this is one trajectory, repeated. Replacing the official whole-image first initialisation stage with an ROI loss
 does not change it (pre-registered; $-7.8^\circ$ after initialisation, $-19.7^\circ$ at the end of the approach).
+Over 40 full in-grasp trials (pre-registered) the official tracker recovers none under either rule, the same as
+Static; it loses the drill during the lift (median roll $-64^\circ$ and tip error 11.7\,cm before the perturbation).
+Our release-configured tracker recovers 10 and our paper-configured one 24 of the same 40 under the roll-free rule.
 
 \textbf{Why the estimate drifts.} Fig.~\ref{fig:landscape} sweeps roll over $\pm60^\circ$ at the true pose on the
 approach frames. For both splats the loss is steep for positive roll and nearly flat for negative roll; as the
